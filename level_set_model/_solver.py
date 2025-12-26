@@ -3,10 +3,6 @@ from numba import njit, prange
 
 from core.wenos import weno5_left as weno_left
 from core.wenos import weno5_right as weno_right
-from core.time_integrators import ssp_rk_3_3 as rk_step
-
-from level_set_geometry import get_geometry
-from level_set_boundary import apply_boundary_conditions
 
 # =============================================================================
 # NUMBA-COMPILED WENO GODUNOV UPWINDING
@@ -168,47 +164,4 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
 
     return dt
 
-def adaptive_timestep_wrapper(ls_solver):
-
-    params = ls_solver.params
-    grid = ls_solver.grid
-    states = ls_solver.states
-
-    dt = adaptive_timestep(states.grad_mag, grid.dx, grid.polar_coords[0], grid.ng, params.CFL, params.t_end, states.br, states.t)
-
-    return dt
-
-
-# =============================================================================
-# RHS FUNCTION FACTORY
-# =============================================================================
-
-def make_L_variable_br(phi_full):
-
-
-    def L(phi_physical, ls_solver):
-
-        params = ls_solver.params
-        grid = ls_solver.grid
-        states = ls_solver.states
-
-        phi_physical = apply_boundary_conditions(phi_physical, grid.ng)
-
-        phi_full[grid.interior] = phi_physical
-        ls_solver.states.grad_mag = weno_godunov(phi_full, grid.dx, grid.polar_coords[0], grid.ng)
-
-        return -states.br * states.grad_mag
-
-    return L
-
-def level_set_step(ls_solver, dt):
-
-    # apply_boundary_conditions(grid.phi, grid.ng)
-    interior = ls_solver.grid.interior
-
-    ls_solver.states.phi[interior] = rk_step(ls_solver.states.phi[interior], dt, lambda phi: ls_solver.grid.L(phi, ls_solver))
-
-    ls_solver = get_geometry(ls_solver)
-
-    return ls_solver
 

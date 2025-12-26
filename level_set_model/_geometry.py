@@ -1,7 +1,6 @@
 import numpy as np
 from numba import njit
 
-# --- Numba Helper Functions ---
 
 @njit(cache=True)
 def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
@@ -383,32 +382,4 @@ def calculate_axial_distributions(phi, phi_cas, cart_coords):
             perimeters[k] = contour_length(contour_segments)
 
     return z_distances, areas, perimeters
-
-
-def get_geometry(ls_solver, sdf="propellant"):
-
-    phi = ls_solver.states.phi
-    phi_cas = ls_solver.states.casing
-    cart_coords = ls_solver.grid.cart_coords
-
-    if sdf == "propellant":
-        z_distances, areas, perimeters = calculate_axial_distributions(phi, phi_cas, cart_coords)
-
-        ls_solver.states.x = z_distances
-        ls_solver.states.A_propellant = areas
-        ls_solver.states.P_propellant = perimeters
-    elif sdf == "casing":
-        z_distances, areas, _ = calculate_axial_distributions(phi_cas, phi_cas, cart_coords)
-
-        ls_solver.states.x = z_distances
-        ls_solver.states.A_casing = areas
-
-    return ls_solver
-
-
-# z_distances, areas, perimeters = calculate_axial_distributions(
-#     phi_combined,
-#     phi_cas,
-#     cart_coords
-# )
 

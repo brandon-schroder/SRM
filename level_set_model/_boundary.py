@@ -2,10 +2,6 @@ from numba import njit, prange
 import numpy as np
 
 
-# =============================================================================
-# NUMBA-COMPILED BOUNDARY CONDITIONS
-# =============================================================================
-
 @njit(fastmath=True, cache=True)
 def apply_boundary_conditions(phi: np.ndarray, ng: int = 3) -> np.ndarray:
     # r boundaries

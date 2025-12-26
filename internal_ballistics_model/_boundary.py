@@ -191,8 +191,8 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng):
     """Apply characteristic-based boundary conditions."""
 
-    U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
-    # U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+    # U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+    U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
     U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
 
     return U
