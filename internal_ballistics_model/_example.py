@@ -11,7 +11,7 @@ def main():
     df = pd.read_csv('nozzle_area_dist.csv')
     x_geom = df['x'] * 1e-3
     A_geom = df['a'] * 1e-6
-    P_geom = np.ones_like(x_geom) * 1E-2
+    P_geom = np.ones_like(x_geom) * 1E-0
 
     # ---------------------------------------------------------
     # 1. Configuration

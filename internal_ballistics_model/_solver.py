@@ -80,7 +80,7 @@ def flux_jit(U, A, rho, u, p):
     F[2] = u * (U[2] + p * A)
     return F
 
-# @njit(fastmath=True, cache=True)
+
 def source_jit(rho_p, Tf, br, R, gamma, p, P_propellant, dAdx):
     """
     JIT-compiled, array-wise source term.

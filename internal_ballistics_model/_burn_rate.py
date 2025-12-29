@@ -6,10 +6,9 @@ def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, m
     port_perimeter = state.P.mean()
 
     rho_p = config.rho_p
-
-    density = state.rho.mean()
-
+    rho = state.rho.mean()
     mf_port = state.rho[-config.ng] * state.u[-config.ng] * port_area
+
 
     if model=="MP":
 
@@ -21,9 +20,9 @@ def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, m
 
         Dh = 4 * port_area / port_perimeter
 
-        Re0 = density * base_burn_rate * Dh / mu
+        Re0 = rho * base_burn_rate * Dh / mu
 
-        G = mf_port / port_area
+        G = abs(mf_port) / port_area
         g0 = G / (rho_p * base_burn_rate)
         g = g0 * K2 * Re0 ** m
 

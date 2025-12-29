@@ -79,84 +79,81 @@ def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
 @njit(fastmath=True, cache=True)
 def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_back, ng):
     """
-    Characteristic-based outlet BC.
+    Robust Characteristic-based outlet BC.
 
-    For subsonic outlet (M < 1):
-    - 3 characteristics enter from upstream (interior)
-    - 1 characteristic exits to downstream (exterior)
-
-    We specify:
-    - Back pressure p_back (the outgoing characteristic)
-    - Extrapolate the 3 incoming characteristics
+    Handles Subsonic/Supersonic switching safely using 0th-order
+    extrapolation for invariants to prevent overshoots.
     """
     N = U.shape[1]
-    im1 = N - ng - 1  # Last interior cell
-    im2 = N - ng - 2  # Second to last interior cell
+    im1 = N - ng - 1  # Last interior cell index
 
-    # Extract state from last two interior cells
-    rho_m1 = U[0, im1] / A[im1]
-    u_m1 = U[1, im1] / U[0, im1]
-    p_m1 = (gamma - 1.0) * (U[2, im1] / A[im1] - 0.5 * rho_m1 * u_m1 * u_m1)
-    p_m1 = max(p_m1, 1e-8)
-    c_m1 = np.sqrt(gamma * p_m1 / rho_m1)
-    M_m1 = abs(u_m1) / max(c_m1, 1e-8)
+    # 1. Recover Primitive Variables at Last Interior Cell
+    rho_int = U[0, im1] / A[im1]
 
-    if M_m1 < 1.0:
-        # Subsonic: use characteristic BC
+    # Safety check for vacuum
+    if rho_int < 1e-9:
+        rho_int = 1e-9
 
-        # Extrapolate Riemann invariants from interior
-        rho_m2 = U[0, im2] / A[im2]
-        u_m2 = U[1, im2] / U[0, im2]
-        p_m2 = (gamma - 1.0) * (U[2, im2] / A[im2] - 0.5 * rho_m2 * u_m2 * u_m2)
-        p_m2 = max(p_m2, 1e-8)
-        c_m2 = np.sqrt(gamma * p_m2 / rho_m2)
+    u_int = U[1, im1] / U[0, im1]
 
-        # Extrapolate outgoing Riemann invariant
-        # J_plus = u + 2*c/(gamma-1)
-        J_plus_m1 = u_m1 + 2.0 * c_m1 / (gamma - 1.0)
-        J_plus_m2 = u_m2 + 2.0 * c_m2 / (gamma - 1.0)
-        J_plus_extrap = 2.0 * J_plus_m1 - J_plus_m2
+    # Calculate Pressure: p = (gamma-1)*(E - 0.5*rho*u^2)
+    p_int = (gamma - 1.0) * (U[2, im1] / A[im1] - 0.5 * rho_int * u_int ** 2)
+    p_int = max(p_int, 1e-9)  # Clamp pressure
 
-        # Extrapolate entropy
-        s_m1 = p_m1 / (rho_m1 ** gamma)
-        s_m2 = p_m2 / (rho_m2 ** gamma)
-        s_extrap = 2.0 * s_m1 - s_m2
-        s_extrap = max(s_extrap, 1e-10)
+    c_int = np.sqrt(gamma * p_int / rho_int)
+    M_int = abs(u_int) / c_int
 
-        # Given p_back and J_plus, s → solve for u, rho, c
-        # From s = p/rho^gamma and p = rho*c^2/gamma:
-        # c^2 = gamma * s * rho^(gamma-1)
+    # 2. Determine Boundary State (Ghost Cell State)
+    rho_g, u_g, p_g = rho_int, u_int, p_int  # Default to 0th-order extrapolation
 
-        # From J_plus = u + 2*c/(gamma-1) and other relations
-        # This requires iteration. Simplified approach:
+    # SUBSONIC OUTFLOW LOGIC (M < 1.0)
+    # We must enforce p_back, but calculate rho and u consistent with outgoing characteristics.
+    if M_int < 1.0:
+        # A. Extrapolate Invariants (Zeroth Order for Stability)
+        # J+ (outgoing) comes from interior
+        J_plus = u_int + 2.0 * c_int / (gamma - 1.0)
 
-        # Use back pressure directly
+        # Entropy (outgoing) comes from interior
+        s_int = p_int / (rho_int ** gamma)
+
+        # B. Enforce Back Pressure
+        # If the flow is subsonic, the exit pressure is controlled by back pressure
         p_g = p_back
 
-        # From entropy: rho = (p/s)^(1/gamma)
-        rho_g = (p_g / s_extrap) ** (1.0 / gamma)
-        rho_g = max(rho_g, 1e-10)
+        # C. Solve for remaining variables using p_back and invariants
+        # rho_g determined by Entropy: s = p / rho^gamma  -> rho = (p/s)^(1/gamma)
+        rho_g = (p_g / s_int) ** (1.0 / gamma)
+        rho_g = max(rho_g, 1e-9)
 
         c_g = np.sqrt(gamma * p_g / rho_g)
 
-        # From Riemann invariant
-        u_g = J_plus_extrap - 2.0 * c_g / (gamma - 1.0)
+        # u_g determined by Riemann Invariant: J+ = u + 2c/(gamma-1)
+        u_g = J_plus - 2.0 * c_g / (gamma - 1.0)
 
-        # Compute energy
-        e_g = p_g / (gamma - 1.0) + 0.5 * rho_g * u_g ** 2
+        # D. Inflow Check (Optional but recommended)
+        # If back pressure is extremely high, it might force u_g < 0 (reverse flow).
+        # For a standard nozzle, we typically clamp to 0 or allow it if your solver handles inflow.
+        # u_g = max(u_g, 0.0)
 
-        # Fill ghost cells
-        for i in range(N - ng, N):
-            U[0, i] = rho_g * A[i]
-            U[1, i] = rho_g * u_g * A[i]
-            U[2, i] = e_g * A[i]
-
+    # SUPERSONIC OUTFLOW LOGIC (M >= 1.0)
+    # All characteristics travel downstream.
+    # The boundary state is simply the interior state extrapolated.
+    # We already set rho_g, u_g, p_g = rho_int, u_int, p_int above.
     else:
-        # Supersonic: all characteristics leave domain, extrapolate everything
-        for i in range(N - ng, N):
-            U[0, i] = U[0, im1] * A[i] / A[im1]
-            U[1, i] = U[1, im1] * A[i] / A[im1]
-            U[2, i] = U[2, im1] * A[i] / A[im1]
+        pass
+
+        # 3. Fill Ghost Cells
+    # We apply the calculated boundary state (rho_g, u_g, p_g) to the ghost cells
+    e_g = p_g / (gamma - 1.0) + 0.5 * rho_g * u_g ** 2
+
+    for i in range(N - ng, N):
+        # Scale by area ratio to conserve mass/momentum/energy FLUX properly if area changes
+        # However, for ghost cells acting as boundary values, using the primitive values
+        # combined with the *ghost cell Area* is usually the correct approach.
+
+        U[0, i] = rho_g * A[i]
+        U[1, i] = rho_g * u_g * A[i]
+        U[2, i] = e_g * A[i]
 
     return U
 
@@ -191,8 +188,8 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng):
     """Apply characteristic-based boundary conditions."""
 
-    # U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
-    U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+    U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+    # U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
     U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
 
     return U
