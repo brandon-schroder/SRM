@@ -80,13 +80,12 @@ def flux_jit(U, A, rho, u, p):
     F[2] = u * (U[2] + p * A)
     return F
 
-
+@njit(fastmath=True, cache=True)
 def source_jit(rho_p, Tf, br, R, gamma, p, P_propellant, dAdx):
     """
     JIT-compiled, array-wise source term.
     Uses pre-computed interior pressure.
     """
-    # rho_p, R, Tf, br, R, gamma, p
 
     S = np.zeros((3, p.shape[0]))
 
@@ -130,6 +129,7 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
     return F_hat
 
 
+@njit(fastmath=True, cache=True)
 def adaptive_timestep(CFL, U, A, gamma, dx, ng):
 
     rho, u, p, c = compute_primitives_jit(U, A, gamma)
