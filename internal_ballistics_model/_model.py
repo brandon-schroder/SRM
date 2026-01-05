@@ -73,9 +73,9 @@ class IBSolver:
             compute_primitives_jit(U_full, self.state.A, self.cfg.gamma)
 
         # Adaptive dissipation
-        alpha = np.max(np.abs(self.state.u[self.grid.interior]) + self.state.c[self.grid.interior])
+        alpha = np.abs(self.state.u) + self.state.c # Local wave speed calculation (Rusanov)
         # Fallback if alpha is NaN (rare)
-        if not np.isfinite(alpha): alpha = 1000.0
+        alpha = np.nan_to_num(alpha, nan=1000.0)
 
         # Fluxes
         F_hat = compute_numerical_flux_jit(
@@ -94,18 +94,17 @@ class IBSolver:
         return S - dFdx
 
     def step(self) -> Tuple[float, float]:
-        # Adaptive Timestep
-        # Use simple max wave speed
-        u_max = np.max(np.abs(self.state.u)) + np.max(self.state.c)
-        dt = self.cfg.CFL * self.grid.dx / (u_max + 1e-16)
 
-        # Update Burn Rate
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
+        # Adaptive Timestep
+        dt = adaptive_timestep(self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng)
 
         # Time Integration (SSP-RK3)
         U_int = self.state.U[:, self.grid.interior]
         U_new = ssp_rk_3_3(U_int, dt, self._compute_rhs)
         self.state.U[:, self.grid.interior] = U_new
+
+        # Update Burn Rate
+        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
 
         self.state.t += dt
         return dt, self.state.t

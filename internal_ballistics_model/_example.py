@@ -62,7 +62,7 @@ def main():
 
         # Monitor progress every 50 steps
         step_count = int(solver.state.t / dt)
-        if step_count % 50 == 0:
+        if step_count % 1000 == 0:
             # We can access solver state variables cleanly
             max_p = np.max(solver.state.p) / 1e5  # Convert Pa to Bar
             max_u = np.max(solver.state.u)

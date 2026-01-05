@@ -129,3 +129,16 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
 
     return F_hat
 
+
+def adaptive_timestep(CFL, U, A, gamma, dx, ng):
+
+    rho, u, p, c = compute_primitives_jit(U, A, gamma)
+
+    c = np.sqrt(np.maximum(gamma * p / rho, 1e-10))
+
+    smax = np.max(np.abs(u[ng:-ng]) + c[ng:-ng])
+
+    dt = CFL * dx / (smax + 1e-16)
+
+    return dt
+
