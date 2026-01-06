@@ -96,7 +96,9 @@ class IBSolver:
     def step(self) -> Tuple[float, float]:
 
         # Adaptive Timestep
-        dt = adaptive_timestep(self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng)
+        dt = adaptive_timestep(
+            self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng,
+            self.state.t, self.cfg.t_end)
 
         # Time Integration (SSP-RK3)
         U_int = self.state.U[:, self.grid.interior]

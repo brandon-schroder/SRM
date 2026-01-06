@@ -24,16 +24,16 @@ def main():
 
     config = SimulationConfig(
         n_periodics=12,  # Number of symmetric segments
-        size=(50, 20, 100),  # Resolution: (nr, ntheta, nz)
+        size=(50, 40, 100),  # Resolution: (nr, ntheta, nz)
         bounds=bounds,  # Physical dimensions
 
         file_prop=prop_file,  # Propellant SDF input
         file_case=case_file,  # Casing SDF input
 
         ng=3,  # Ghost cells
-        CFL=0.5,  # Stability factor
-        t_end=0.05,  # Simulation duration
-        br_initial=5.0e-3  # Initial burn rate (m/s)
+        CFL=0.8,  # Stability factor
+        t_end=0.5,  # Simulation duration
+        br_initial=10.0  # Initial burn rate (mm/s)
     )
 
     print(f"--- Initializing Level Set Simulation: {config.size} cells ---")
@@ -62,7 +62,7 @@ def main():
 
         # Monitor progress every 10 steps
         step_count = int(solver.state.t / dt)
-        if step_count % 10 == 0:
+        if step_count % 1 == 0:
             # We can access solver state variables cleanly
             # For example, checking the average value of the level set field
             avg_phi = np.mean(solver.state.phi)

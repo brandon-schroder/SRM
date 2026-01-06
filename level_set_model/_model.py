@@ -47,6 +47,9 @@ class LSSolver:
         self._get_geometry("propellant")
         self._get_geometry("casing")
 
+        self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
+        self.state.br = self.cfg.br_initial
+
 
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
 

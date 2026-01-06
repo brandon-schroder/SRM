@@ -130,7 +130,7 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
 
 
 @njit(fastmath=True, cache=True)
-def adaptive_timestep(CFL, U, A, gamma, dx, ng):
+def adaptive_timestep(CFL, U, A, gamma, dx, ng, t, t_end):
 
     rho, u, p, c = compute_primitives_jit(U, A, gamma)
 
@@ -138,7 +138,22 @@ def adaptive_timestep(CFL, U, A, gamma, dx, ng):
 
     smax = np.max(np.abs(u[ng:-ng]) + c[ng:-ng])
 
-    dt = CFL * dx / (smax + 1e-16)
+    dt_stable = CFL * dx / (smax + 1e-16)
+
+    # Do not overshoot the final time
+    t_remaining = t_end - t
+
+    # If the time remaining is too small, or overshoots, return dt=0
+    if t_remaining <= 1e-10 or t_remaining < 0:
+        return 0.0
+
+    # Prevents small timesteps near t_end
+    if t_remaining <= dt_stable:
+        dt = t_remaining
+    elif t_remaining < 2.0 * dt_stable:
+        dt = t_remaining / 2.0
+    else:
+        dt = dt_stable
 
     return dt
 

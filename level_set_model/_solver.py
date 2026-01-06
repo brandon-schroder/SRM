@@ -98,14 +98,6 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
     the same for the entire shell.
 
     """
-    # grad_mag = grid.grad_mag
-    # dx = grid.dx
-    # r_coords = grid.polar_coords[0]
-    # ng = grid.ng
-
-    # CFL = simulation_inputs.CFL
-    # t_end = simulation_inputs.t_end
-    # br = simulation_inputs.br
 
     nr, ntheta, nz = grad_mag.shape
     dr, dtheta, dz = dx
@@ -149,18 +141,26 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
         if dt_local < dt_min:
             dt_min = dt_local
 
-    if dt_min > 1e19:                     # no significant gradient anywhere
-        dt = 0.1
-    else:
-        dt = CFL * dt_min
+    # Calculate minimum stable timestep
+    dt_stable = CFL * dt_min
 
     # Global safety caps
-    dt = max(dt, 1e-8)
-    dt = min(dt, 0.5)
+    dt_stable = min(max(dt_stable, 1e-8), 0.1)
 
-    # Do not overshoot final time
-    if t_end is not None:
-        dt = min(dt, t_end - t)
+    # Do not overshoot the final time
+    t_remaining = t_end - t
+
+    # If the time remaining is too small, or overshoots, return dt=0
+    if t_remaining <= 1e-10 or t_remaining < 0:
+        return 0.0
+
+    # Prevents small timesteps near t_end
+    if t_remaining <= dt_stable:
+        dt = t_remaining
+    elif t_remaining < 2.0 * dt_stable:
+        dt = t_remaining / 2.0
+    else:
+        dt = dt_stable
 
     return dt
 

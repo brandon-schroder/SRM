@@ -23,7 +23,7 @@ def main():
         ng=3,  # Ghost cells
         bounds=(x_geom.min(), x_geom.max()),  # Domain length (meters)
         CFL=0.5,  # Stability factor
-        t_end=0.015,  # Simulation duration
+        t_end=0.005,  # Simulation duration
 
         # Initial Conditions
         p0_inlet=3.5e6,  # 3.5 MPa Chamber Pressure
@@ -75,7 +75,7 @@ def main():
     # ---------------------------------------------------------
     # 6. Post-Processing
     # ---------------------------------------------------------
-    print("\nSimulation Complete.")
+    print(f"\nSimulation Complete (t = {solver.state.t} s)")
 
     # Get the final state as a DataFrame
     df = solver.get_dataframe()
