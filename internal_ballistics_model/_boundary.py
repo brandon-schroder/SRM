@@ -133,7 +133,7 @@ def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_back, ng):
         # D. Inflow Check (Optional but recommended)
         # If back pressure is extremely high, it might force u_g < 0 (reverse flow).
         # For a standard nozzle, we typically clamp to 0 or allow it if your solver handles inflow.
-        # u_g = max(u_g, 0.0)
+        u_g = max(u_g, 0.0)
 
     # SUPERSONIC OUTFLOW LOGIC (M >= 1.0)
     # All characteristics travel downstream.
