@@ -87,7 +87,7 @@ class LSSolver:
 
         dt = adaptive_timestep(
             self.state.grad_mag, self.grid.dx, self.grid.polar_coords[1], self.grid.ng,
-            self.cfg.CFL, self.cfg.t_end, self.cfg.br_initial, self.cfg.t_start)
+            self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
 
         # 2. Advance Level Set
         # level_set_step handles the RK3 integration and calls get_geometry internally
