@@ -1,7 +1,7 @@
 import numpy as np
 import pyvista as pv
 
-from _structure import SimulationConfig
+from ._structure import SimulationConfig
 
 class Grid3D:
     def __init__(self, config: SimulationConfig):

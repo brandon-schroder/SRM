@@ -2,11 +2,11 @@ from typing import Tuple
 import pandas as pd
 
 # Import Solver Functions
-from _grid import *
-from _structure import *
-from _solver import *
-from _geometry import *
-from _boundary import *
+from ._grid import *
+from ._structure import *
+from ._solver import *
+from ._geometry import *
+from ._boundary import *
 
 from core.time_integrators import ssp_rk_3_3 as rk_step
 

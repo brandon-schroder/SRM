@@ -1,10 +1,10 @@
 import pandas as pd
 
 # Import functions
-from _grid import *
-from _boundary import *
-from _burn_rate import *
-from _solver import *
+from ._grid import *
+from ._boundary import *
+from ._burn_rate import *
+from ._solver import *
 
 from core.time_integrators import ssp_rk_3_3
 

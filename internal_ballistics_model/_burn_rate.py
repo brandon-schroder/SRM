@@ -1,4 +1,4 @@
-from _structure import *
+from ._structure import *
 
 def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, model="MP"):
 
