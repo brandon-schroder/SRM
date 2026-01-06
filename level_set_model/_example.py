@@ -19,20 +19,21 @@ def main():
     # Domain bounds: [r_min, r_max, theta_min, theta_max, z_min, z_max]
     # Note: theta bounds (indices 2, 3) are automatically handled by
     # n_periodics in the grid generation, but we provide placeholders.
-    bounds = [10.0, 35.0, None, None, 0.0, 100.0]
+    bounds = [10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 100.0*1e-3]
 
     config = SimulationConfig(
         n_periodics=12,  # Number of symmetric segments
         size=(50, 40, 100),  # Resolution: (nr, ntheta, nz)
         bounds=bounds,  # Physical dimensions
+        file_scale=1.0e-3,
 
         file_prop=prop_file,  # Propellant SDF input
         file_case=case_file,  # Casing SDF input
 
         ng=3,  # Ghost cells
         CFL=0.8,  # Stability factor
-        t_end=0.5,  # Simulation duration
-        br_initial=10.0  # Initial burn rate (mm/s)
+        t_end=0.1,  # Simulation duration
+        br_initial=10.0e-3  # Initial burn rate (mm/s)
     )
 
     print(f"--- Initializing Level Set Simulation: {config.size} cells ---")

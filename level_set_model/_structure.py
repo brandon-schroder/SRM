@@ -1,8 +1,6 @@
 import numpy as np
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple, Any
-import pyvista as pv
 
 
 @dataclass
@@ -16,6 +14,7 @@ class SimulationConfig:
     bounds: list[float]
     file_prop: str | Path
     file_case: str | Path
+    file_scale: float = 1.0 # Meters as default
     ng: int = 3
 
     CFL: float = 0.8

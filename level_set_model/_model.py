@@ -1,3 +1,4 @@
+from typing import Tuple
 import pandas as pd
 
 # Import Solver Functions
@@ -31,8 +32,8 @@ class LSSolver:
         filename_prop = self.cfg.file_prop
         filename_case = self.cfg.file_case
 
-        prop = pv.read(filename_prop)
-        case = pv.read(filename_case)
+        prop = pv.read(filename_prop).file_scale(self.cfg.file_scale)
+        case = pv.read(filename_case).file_scale(self.cfg.file_scale)
         prop = prop.clip_surface(case, invert=True)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
@@ -73,13 +74,13 @@ class LSSolver:
             z_distances, areas, perimeters = calculate_axial_distributions(phi, phi_cas, cart_coords)
 
             self.state.x = z_distances
-            self.state.A_propellant = areas
-            self.state.P_propellant = perimeters
+            self.state.A_propellant = areas*self.cfg.n_periodics
+            self.state.P_propellant = perimeters*self.cfg.n_periodics
         elif sdf == "casing":
             z_distances, areas, _ = calculate_axial_distributions(phi_cas, phi_cas, cart_coords)
 
             self.state.x = z_distances
-            self.state.A_casing = areas
+            self.state.A_casing = areas*self.cfg.n_periodics
 
 
     def step(self) -> Tuple[float, float]:
