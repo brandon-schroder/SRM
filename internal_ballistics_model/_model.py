@@ -42,7 +42,7 @@ class IBSolver:
         self.state.rho[:] = self.cfg.p_inf / (self.cfg.R * self.cfg.t_initial)
         self.state.p[:] = self.cfg.p_inf
         self.state.u[:] = self.cfg.u_initial
-        self.state.br = 0.0
+        self.state.br = self.cfg.br_initial
 
         self.state.U = primitive_to_conserved(
             self.state.rho, self.state.u, self.state.p,self.state.A, self.cfg.gamma
