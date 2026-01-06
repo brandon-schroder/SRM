@@ -86,7 +86,7 @@ class LSSolver:
         # 1. Adaptive Timestep
 
         dt = adaptive_timestep(
-            self.state.grad_mag, self.grid.dx, self.grid.polar_coords[1], self.grid.ng,
+            self.state.grad_mag, self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
             self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
 
         # 2. Advance Level Set
