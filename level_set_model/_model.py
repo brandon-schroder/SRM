@@ -22,18 +22,18 @@ class LSSolver:
         self.state = State(dims=self.grid.dims)
 
         # 3. Initialize Solver
-        self._initialize()
+        self.initialize()
 
 
-    def _initialize(self):
+    def initialize(self):
         """
         Loads initial geometry (SDFs) and calculates initial properties.
         """
         filename_prop = self.cfg.file_prop
         filename_case = self.cfg.file_case
 
-        prop = pv.read(filename_prop).file_scale(self.cfg.file_scale)
-        case = pv.read(filename_case).file_scale(self.cfg.file_scale)
+        prop = pv.read(filename_prop).scale(self.cfg.file_scale)
+        case = pv.read(filename_case).scale(self.cfg.file_scale)
         prop = prop.clip_surface(case, invert=True)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
@@ -50,6 +50,7 @@ class LSSolver:
 
         self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
         self.state.br = self.cfg.br_initial
+        self.state.t = 0.0
 
 
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
