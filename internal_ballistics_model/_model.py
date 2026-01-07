@@ -105,7 +105,7 @@ class IBSolver:
         self.state.U[:, self.grid.interior] = U_new
 
         # Update Burn Rate
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
+        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
 
         self.state.t += dt
         return dt, self.state.t

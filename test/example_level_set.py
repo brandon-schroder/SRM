@@ -20,7 +20,7 @@ def main():
     bounds = [10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 100.0*1e-3]
 
     config = SimulationConfig(
-        n_periodics=12,  # Number of symmetric segments
+        n_periodics=11,  # Number of symmetric segments
         size=(50, 40, 100),  # Resolution: (nr, ntheta, nz)
         bounds=bounds,  # Physical dimensions
         file_scale=1.0e-3,
@@ -30,8 +30,8 @@ def main():
 
         ng=3,  # Ghost cells
         CFL=0.8,  # Stability factor
-        t_end=0.1,  # Simulation duration
-        br_initial=10.0e-3  # Initial burn rate (mm/s)
+        t_end=0.001,  # Simulation duration
+        br_initial=0.00001e-3  # Initial burn rate (mm/s)
     )
 
     print(f"--- Initializing Level Set Simulation: {config.size} cells ---")

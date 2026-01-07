@@ -43,8 +43,6 @@ class CoupledSolver:
         # 3. Initialize Flow (uses the geometry we just set)
         self.ib.initialize()
 
-        # 4. Set the initial burn rate in LS based on IB initialization
-        self.ls.state.br = self.ib.state.br
 
     def _sync_geometry(self):
         """
@@ -85,7 +83,7 @@ class CoupledSolver:
             dt_ib, t_ib = self.ib.step()
 
             # Break if solver finished or stalled
-            if dt_ib <= 0.0:
+            if dt_ib <= 1E-10:
                 break
 
         # --- 3. Sync Geometry for Next Step ---
