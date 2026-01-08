@@ -25,9 +25,11 @@ def weno_godunov(phi, dx, r_coords, ng=3):
     D_theta = np.empty((nr, ntheta, nz))
     D_z = np.empty((nr, ntheta, nz))
 
-    for i in prange(nr):
-        for j in prange(ntheta):
-            for k in prange(nz):
+
+    for k in prange(nz):         # Outer
+        for j in prange(ntheta): # Middle
+            for i in prange(nr): # Inner (Fastest memory access)
+
                 ii = i + ng
                 kk = k + ng
 

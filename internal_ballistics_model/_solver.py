@@ -113,11 +113,10 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
     fm = 0.5 * (F - alpha * U)
 
     F_hat = np.zeros((num_comp, nc+1))
-    for i in range(nc + 1):
-        ii = i + ng - 1
 
-        # For each component
-        for m in range(num_comp):
+    for m in range(num_comp):
+        for i in range(nc + 1): # Inner: Spatial (Contiguous)
+            ii = i + ng - 1
             # Left-biased reconstruction (f+)
             F_hat_p = weno_left(fp[m, ii - 2], fp[m, ii - 1], fp[m, ii], fp[m, ii + 1], fp[m, ii + 2], fp[m, ii + 3])
 

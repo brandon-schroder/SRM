@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, prange
 
 # --- Constants for Marching Squares ---
 BIT_TL = 1
@@ -30,8 +30,9 @@ def marching_cubes(phi_slice, x_coords, y_coords):
     p_left = np.zeros(2)
     p_right = np.zeros(2)
 
-    for i in range(n_r - 1):
-        for j in range(n_t - 1):
+
+    for j in range(n_t - 1): # Outer loop: Slow dimension
+        for i in range(n_r - 1): # Inner loop: Fast dimension (contiguous)
             phi_A = phi_slice[i, j]
             phi_B = phi_slice[i, j + 1]
             phi_C = phi_slice[i + 1, j + 1]
@@ -296,7 +297,7 @@ def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
     return area, perimeter
 
 
-@njit
+@njit(parallel=True)
 def calculate_axial_distributions(phi, phi_cas, cart_coords):
     """Calculate axial distributions of area and perimeter for all z-slices."""
     phi_combined = np.maximum(phi, phi_cas)
@@ -307,7 +308,7 @@ def calculate_axial_distributions(phi, phi_cas, cart_coords):
     areas = np.zeros(n_z, dtype=np.float64)
     perimeters = np.zeros(n_z, dtype=np.float64)
 
-    for k in range(n_z):
+    for k in prange(n_z):
         z_distances[k] = z_coords[0, 0, k]
         areas[k], perimeters[k] = process_slice_geometry(
             phi_combined[..., k], phi_cas[..., k],
