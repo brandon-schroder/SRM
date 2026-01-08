@@ -1,6 +1,11 @@
 import numpy as np
 from numba import njit
 
+# --- Constants for Marching Squares ---
+BIT_TL = 1  # Top-Left
+BIT_TR = 2  # Top-Right
+BIT_BR = 4  # Bottom-Right
+BIT_BL = 8  # Bottom-Left
 
 @njit(cache=True)
 def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
@@ -12,6 +17,16 @@ def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
     x = p1_x + t * (p2_x - p1_x)
     y = p1_y + t * (p2_y - p1_y)
     return np.array([x, y])
+
+
+@njit(cache=True)
+def segments_list_to_array(segment_list):
+    """Helper to convert Numba list of segments to fixed-size array."""
+    n = len(segment_list)
+    arr = np.empty((n, 4), dtype=np.float64)
+    for i in range(n):
+        arr[i] = segment_list[i]
+    return arr
 
 
 @njit(cache=True)
@@ -34,10 +49,10 @@ def marching_cubes(phi_slice, x_coords, y_coords):
             phi_D = phi_slice[i + 1, j]
 
             case = 0
-            if phi_A > 0: case |= 1
-            if phi_B > 0: case |= 2
-            if phi_C > 0: case |= 4
-            if phi_D > 0: case |= 8
+            if phi_A > 0: case |= BIT_TL
+            if phi_B > 0: case |= BIT_TR
+            if phi_C > 0: case |= BIT_BR
+            if phi_D > 0: case |= BIT_BL
 
             if case == 0 or case == 15:
                 continue
@@ -80,7 +95,10 @@ def marching_cubes(phi_slice, x_coords, y_coords):
 
 
 @njit
-def make_continuous_contour(segments_array):
+def build_graph(segments_array):
+    """
+    Constructs an adjacency graph from a list of segments.
+    """
     n_segs = len(segments_array)
 
     # Extract unique points and build adjacency using indices
@@ -114,21 +132,25 @@ def make_continuous_contour(segments_array):
         adjacency[idx2, degree[idx2]] = idx1
         degree[idx2] += 1
 
-    # Find start node (odd degree or first node)
-    start = 0
-    for i in range(n_points):
-        if degree[i] % 2 == 1:
-            start = i
-            break
+    return adjacency, degree, points_list
 
-    # Hierholzer's algorithm using arrays
-    stack = np.empty(n_segs * 2, dtype=np.int32)
-    stack[0] = start
+
+@njit
+def traverse_graph_path(adjacency, degree, start_node, n_edges):
+    """
+    Finds a path through the graph using Hierholzer's algorithm.
+    Returns the raw path array and the number of points in the path.
+    """
+    # Stack for backtracking
+    stack = np.empty(n_edges * 2, dtype=np.int32)
+    stack[0] = start_node
     stack_ptr = 1
 
-    path = np.empty(n_segs * 2, dtype=np.int32)
+    # Output path
+    path = np.empty(n_edges * 2, dtype=np.int32)
     path_ptr = 0
 
+    # Copy degree array to track used edges
     edge_used = degree.copy()
 
     while stack_ptr > 0:
@@ -137,7 +159,7 @@ def make_continuous_contour(segments_array):
             edge_used[u] -= 1
             v = adjacency[u, edge_used[u]]
 
-            # Remove reverse edge
+            # Remove reverse edge to ensure we don't traverse it back immediately
             for i in range(edge_used[v]):
                 if adjacency[v, i] == u:
                     adjacency[v, i] = adjacency[v, edge_used[v] - 1]
@@ -151,11 +173,32 @@ def make_continuous_contour(segments_array):
             path[path_ptr] = u
             path_ptr += 1
 
-    # Reverse path
+    return path, path_ptr
+
+
+@njit
+def make_continuous_contour(segments_array):
+    n_segs = len(segments_array)
+
+    # 1. Build the graph
+    adjacency, degree, points_list = build_graph(segments_array)
+    n_points = len(points_list)
+
+    # 2. Find start node (odd degree or first node)
+    start = 0
+    for i in range(n_points):
+        if degree[i] % 2 == 1:
+            start = i
+            break
+
+    # 3. Run Traversal Algorithm
+    path, path_ptr = traverse_graph_path(adjacency, degree, start, n_segs)
+
+    # 4. Reverse path (Hierholzer's builds it backwards)
     for i in range(path_ptr // 2):
         path[i], path[path_ptr - 1 - i] = path[path_ptr - 1 - i], path[i]
 
-    # Convert to output format
+    # 5. Format Output
     ordered_segments = np.empty((path_ptr - 1, 4), dtype=np.float64)
     ordered_points = np.empty((path_ptr, 2), dtype=np.float64)
 
@@ -293,6 +336,45 @@ def contour_length(contour_segments):
 
 
 @njit
+def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
+    """
+    Processes a single 2D slice to calculate area and perimeter.
+    """
+    # 1. Generate Raw Contours
+    contour_list = marching_cubes(phi_slice, x_slice, y_slice)
+    casing_list = marching_cubes(phicas_slice, x_slice, y_slice)
+
+    # Handle an empty propellant case early
+    if len(contour_list) == 0:
+        return 0.0, 0.0
+
+    # 2. Convert to Arrays
+    contour_segments_arr = segments_list_to_array(contour_list)
+
+    # 3. Build Continuous Contour & Calculate Area
+    contour_segments_ordered, contour_points = make_continuous_contour(contour_segments_arr)
+    area = contour_bounded_area(contour_points)
+
+    # 4. Handle Perimeter (with Casing Clip)
+    perimeter = 0.0
+
+    if len(casing_list) > 0:
+        casing_segments_arr = segments_list_to_array(casing_list)
+        casing_segments, _ = make_continuous_contour(casing_segments_arr)
+
+        # Clip contour using the ordered segments for the propellant
+        clip_segments, _ = clip_contour(contour_segments_ordered, casing_segments)
+
+        if len(clip_segments) > 0:
+            perimeter = contour_length(clip_segments)
+    else:
+        # No casing, use full contour length
+        perimeter = contour_length(contour_segments_ordered)
+
+    return area, perimeter
+
+
+@njit
 def calculate_axial_distributions(phi, phi_cas, cart_coords):
     """
     Calculate axial distributions of area and perimeter for all z-slices.
@@ -303,12 +385,8 @@ def calculate_axial_distributions(phi, phi_cas, cart_coords):
         Level set field
     phi_cas : array of shape (n_r, n_t, n_z)
         Casing level set field
-    x_coords : array of shape (n_r, n_t, n_z)
-        Cartesian x coordinates
-    y_coords : array of shape (n_r, n_t, n_z)
-        Cartesian y coordinates
-    z_coords : array of shape (n_r, n_t, n_z)
-        Cartesian z coordinates
+    cart_coords : tuple of arrays
+        (x_coords, y_coords, z_coords) each of shape (n_r, n_t, n_z)
 
     Returns:
     --------
@@ -329,57 +407,18 @@ def calculate_axial_distributions(phi, phi_cas, cart_coords):
     perimeters = np.zeros(n_z, dtype=np.float64)
 
     for k in range(n_z):
-        # Get z coordinate (assuming constant across r, t at each z-slice)
+        # 1. Update Z-distance (assuming constant across r, t at each z-slice)
         z_distances[k] = z_coords[0, 0, k]
 
-        # Extract slices
+        # 2. Extract Slices
         phi_slice = phi[:, :, k]
         phicas_slice = phi_cas[:, :, k]
         x_slice = x_coords[:, :, k]
         y_slice = y_coords[:, :, k]
 
-        # Extract contour segments
-        contour_segments_list = marching_cubes(phi_slice, x_slice, y_slice)
-        casing_segments_list = marching_cubes(phicas_slice, x_slice, y_slice)
-
-        # Handle empty contours
-        if len(contour_segments_list) == 0:
-            areas[k] = 0.0
-            perimeters[k] = 0.0
-            continue
-
-        # Convert to arrays
-        n_contour = len(contour_segments_list)
-        contour_segments_array = np.empty((n_contour, 4), dtype=np.float64)
-        for i in range(n_contour):
-            contour_segments_array[i] = contour_segments_list[i]
-
-        # Make continuous contour
-        contour_segments, contour_points = make_continuous_contour(contour_segments_array)
-
-        # Calculate area
-        areas[k] = contour_bounded_area(contour_points)
-
-        # Handle casing clipping if casing contour exists
-        if len(casing_segments_list) > 0:
-            n_casing = len(casing_segments_list)
-            casing_segments_array = np.empty((n_casing, 4), dtype=np.float64)
-            for i in range(n_casing):
-                casing_segments_array[i] = casing_segments_list[i]
-
-            casing_segments, casing_points = make_continuous_contour(casing_segments_array)
-
-            # Clip contour by casing
-            clip_segments, clip_points = clip_contour(contour_segments, casing_segments)
-
-            # Calculate perimeter from clipped segments
-            if len(clip_segments) > 0:
-                perimeters[k] = contour_length(clip_segments)
-            else:
-                perimeters[k] = 0.0
-        else:
-            # No casing, use full contour length
-            perimeters[k] = contour_length(contour_segments)
+        # 3. Delegate Processing
+        areas[k], perimeters[k] = process_slice_geometry(
+            phi_slice, phicas_slice, x_slice, y_slice
+        )
 
     return z_distances, areas, perimeters
-
