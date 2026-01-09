@@ -71,6 +71,9 @@ class IBSolver:
         self.state.rho, self.state.u, self.state.p, self.state.c = \
             compute_primitives_jit(U_full, self.state.A, self.cfg.gamma)
 
+        # Update Burn Rate
+        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
+
         # Adaptive dissipation
         alpha = np.abs(self.state.u) + self.state.c # Local wave speed calculation (Rusanov)
         # Fallback if alpha is NaN (rare)
@@ -104,8 +107,6 @@ class IBSolver:
         U_new = ssp_rk_3_3(U_int, dt, self._compute_rhs)
         self.state.U[:, self.grid.interior] = U_new
 
-        # Update Burn Rate
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
 
         self.state.t += dt
         return dt, self.state.t
