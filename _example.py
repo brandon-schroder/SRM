@@ -6,8 +6,8 @@ import internal_ballistics_model
 import level_set_model
 
 bounds=[10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 1035.0*1e-3]
-prop_file = Path("test\\07R-SRM-Propellant.STL")
-case_file = Path("test\\07R-SRM-Casing.STL")
+prop_file = Path("test\\geometry\\07R-SRM-Propellant.STL")
+case_file = Path("test\\geometry\\07R-SRM-Casing.STL")
 
 ib_config = internal_ballistics_model._structure.SimulationConfig(
     # Grid parameters

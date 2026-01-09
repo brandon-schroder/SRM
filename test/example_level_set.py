@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Import our new modules
 from level_set_model import SimulationConfig, LSSolver
 
 def main():
@@ -11,8 +10,8 @@ def main():
     # ---------------------------------------------------------
     # Define paths to your geometry files (Change these to your actual file names)
     # These should be PyVista-readable files (vtk, vtm, stl, etc.)
-    prop_file = Path("07R-SRM-Propellant.STL")
-    case_file = Path("07R-SRM-Casing.STL")
+    prop_file = Path("geometry/07R-SRM-Propellant.STL")
+    case_file = Path("geometry/07R-SRM-Casing.STL")
 
     # Domain bounds: [r_min, r_max, theta_min, theta_max, z_min, z_max]
     # Note: theta bounds (indices 2, 3) are automatically handled by
