@@ -7,8 +7,9 @@ BIT_TR = 2
 BIT_BR = 4
 BIT_BL = 8
 
+save_cache = False
 
-@njit(cache=True)
+@njit(cache=save_cache)
 def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
     """Finds the (x, y) coordinate of the zero-crossing using linear interpolation."""
     if p2_phi == p1_phi:
@@ -20,7 +21,7 @@ def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
     return np.array([x, y])
 
 
-@njit(cache=True)
+@njit(cache=save_cache)
 def marching_cubes(phi_slice, x_coords, y_coords):
     """Extracts the contour segments (as a Numba List) of the zero-level set."""
     contour_segments = []
@@ -84,7 +85,7 @@ def marching_cubes(phi_slice, x_coords, y_coords):
     return contour_segments
 
 
-@njit
+@njit(cache=save_cache)
 def build_graph(segments_array):
     """Constructs an adjacency graph from a list of segments."""
     n_segs = len(segments_array)
@@ -115,7 +116,7 @@ def build_graph(segments_array):
     return adjacency, degree, points_list
 
 
-@njit
+@njit(cache=save_cache)
 def traverse_graph_path(adjacency, edge_used, start_node):
     """Finds a single continuous path using Hierholzer's algorithm logic."""
     stack = [start_node]
@@ -136,7 +137,7 @@ def traverse_graph_path(adjacency, edge_used, start_node):
     return path
 
 
-@njit
+@njit(cache=save_cache)
 def make_continuous_contour(segments_array):
     """Finds all disconnected curves and returns them as a list of (segments, points)."""
     # Defensive check removed per request; empty arrays handle naturally
@@ -176,7 +177,7 @@ def make_continuous_contour(segments_array):
     return all_curves
 
 
-@njit
+@njit(cache=save_cache)
 def contour_bounded_area(contour_points):
     """Calculate area bounded by contour using shoelace formula (closed via origin)."""
     n = len(contour_points)
@@ -189,7 +190,7 @@ def contour_bounded_area(contour_points):
     return abs(area) / 2.0
 
 
-@njit
+@njit(cache=save_cache)
 def filter_curves(curves_list):
     """Selects the curve with the largest bounded area."""
     valid_curves = []
@@ -210,7 +211,7 @@ def filter_curves(curves_list):
     return valid_curves
 
 
-@njit
+@njit(cache=save_cache)
 def clip_contour(contour_segments, casing_segments):
     """Clips contour segments that share endpoints with casing segments."""
     n_casing = len(casing_segments)
@@ -244,7 +245,7 @@ def clip_contour(contour_segments, casing_segments):
     return clip_segments, clip_points
 
 
-@njit
+@njit(cache=save_cache)
 def contour_length(contour_segments):
     """Calculate total Euclidean length of all segments in the contour."""
     total_length = 0.0
@@ -255,7 +256,7 @@ def contour_length(contour_segments):
     return total_length
 
 
-@njit
+@njit(cache=save_cache)
 def segments_list_to_array(segment_list):
     """Helper to convert Numba list of segments to fixed-size array."""
     n = len(segment_list)
@@ -265,7 +266,7 @@ def segments_list_to_array(segment_list):
     return arr
 
 
-@njit
+@njit(cache=save_cache)
 def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
     """Processes a 2D slice to calculate the primary contour area and perimeter."""
     contour_list = marching_cubes(phi_slice, x_slice, y_slice)
@@ -297,7 +298,7 @@ def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
     return area, perimeter
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=save_cache)
 def calculate_axial_distributions(phi, phi_cas, cart_coords):
     """Calculate axial distributions of area and perimeter for all z-slices."""
     phi_combined = np.maximum(phi, phi_cas)
