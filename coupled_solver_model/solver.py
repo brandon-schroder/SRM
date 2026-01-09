@@ -1,20 +1,8 @@
-import numpy as np
-import pandas as pd
-from dataclasses import dataclass
 
-# Import your existing models
-from internal_ballistics_model import IBSolver, SimulationConfig as IBConfig
-from level_set_model import LSSolver, SimulationConfig as LSConfig
+from .config import CoupledConfig
 
-
-@dataclass
-class CoupledConfig:
-    """Configuration for the coupled simulation."""
-    ib_config: IBConfig
-    ls_config: LSConfig
-    t_end: float = 1.0
-
-
+from internal_ballistics_model import IBSolver
+from level_set_model import LSSolver
 
 class CoupledSolver:
     def __init__(self, config: CoupledConfig):

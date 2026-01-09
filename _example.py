@@ -1,7 +1,9 @@
 from pathlib import Path
 import pyvista as pv
+import pandas as pd
+import numpy as np
 
-from coupled_solver import *
+import coupled_solver_model
 import internal_ballistics_model
 import level_set_model
 
@@ -43,12 +45,12 @@ ls_config = level_set_model.config.SimulationConfig(
     br_initial=10.0e-3  # Initial burn rate
 )
 
-coupled_conf = CoupledConfig(
+coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
     t_end=1)
 
-solver = CoupledSolver(coupled_conf)
+solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)
 
 initial_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
 
