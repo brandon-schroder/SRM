@@ -1,2 +1,2 @@
-from ._model import IBSolver
-from ._structure import SimulationConfig
+from .solver import IBSolver
+from .config import SimulationConfig

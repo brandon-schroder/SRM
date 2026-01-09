@@ -1,6 +1,6 @@
 import numpy as np
 
-from ._structure import SimulationConfig
+from .config import SimulationConfig
 
 class Grid1D:
     def __init__(self, config: SimulationConfig):

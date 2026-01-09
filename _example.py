@@ -9,7 +9,7 @@ bounds=[10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 1035.0*1e-3]
 prop_file = Path("test\\geometry\\07R-SRM-Propellant.STL")
 case_file = Path("test\\geometry\\07R-SRM-Casing.STL")
 
-ib_config = internal_ballistics_model._structure.SimulationConfig(
+ib_config = internal_ballistics_model.config.SimulationConfig(
     # Grid parameters
     n_cells=200,  # Spatial resolution
     ng=3,  # Ghost cells
@@ -28,7 +28,7 @@ ib_config = internal_ballistics_model._structure.SimulationConfig(
 
 )
 
-ls_config = level_set_model._structure.SimulationConfig(
+ls_config = level_set_model.config.SimulationConfig(
     n_periodics=11,  # Number of symmetric segments
     size=(50, 40, 300),  # Resolution: (nr, ntheta, nz)
     bounds=bounds,  # Physical dimensions

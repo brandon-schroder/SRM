@@ -1,2 +1,2 @@
-from ._model import LSSolver
-from ._structure import SimulationConfig
+from .solver import LSSolver
+from .config import SimulationConfig
