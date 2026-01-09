@@ -15,7 +15,7 @@ ib_config = internal_ballistics_model._structure.SimulationConfig(
     ng=3,  # Ghost cells
     bounds=(bounds[4], bounds[5]),  # Domain length (meters)
     CFL=0.9,  # Stability factor
-    t_end=0.005,  # Simulation duration
+    t_end=20.0,  # Simulation duration
 
     # Initial Conditions
     p0_inlet=3.5e6,  # 3.5 MPa Chamber Pressure
@@ -38,15 +38,15 @@ ls_config = level_set_model._structure.SimulationConfig(
     file_case=case_file,  # Casing SDF input
 
     ng=3,  # Ghost cells
-    CFL=0.9,  # Stability factor
-    t_end=0.1,  # Simulation duration
+    CFL=0.5,  # Stability factor
+    t_end=20.0,  # Simulation duration
     br_initial=10.0e-3  # Initial burn rate
 )
 
 coupled_conf = CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
-    t_end=0.2)
+    t_end=1)
 
 solver = CoupledSolver(coupled_conf)
 
@@ -58,19 +58,51 @@ times = []
 pressures = []
 burn_rates = []
 
+history = []
+
 while solver.t < coupled_conf.t_end:
     dt_ls, t_current = solver.step()
 
     p_head = solver.ib.state.p.max()
     br_curr = solver.ib.state.br
 
-    if dt_ls <= 1E-10:
-        break
+    # Create small DF for this step
+    df_step = pd.DataFrame({
+        "t": solver.ls.state.t,
+        "x": solver.ls.state.x,
+        "A": solver.ls.state.A_propellant,
+        "P": solver.ls.state.P_propellant
+    })
+    history.append(df_step)
+
+    # ========================================================
+    # DEBUGGING: Check for bad areas
+
+    areas  = solver.ls.state.A_propellant
+    z_distances = solver.ls.state.x
+
+
+    if 1 > solver.t > 2:
+        print(f"Warning: bad area detected")
+        # Save all fields required to run 'calculate_axial_distributions'
+        np.savez_compressed(
+            "debug_state.npz",
+            pv_grid=solver.ls.grid.pv_grid,
+            phi=solver.ls.state.phi,
+            casing=solver.ls.state.casing,
+            cart_coords=solver.ls.grid.cart_coords,
+            t=solver.t
+        )
+
+    # ========================================================
+
+
 
     print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa | BR: {br_curr * 1000:.2f} mm/s")
 
-    if dt_ls <= 1E-10 or t_current >= coupled_conf.t_end:
+    if t_current >= coupled_conf.t_end or p_head < ib_config.p_inf:
         break
+
 
 solver.ls.grid.pv_grid["propellant"] = solver.ls.state.phi.flatten(order='F')
 final_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
@@ -84,3 +116,8 @@ plotter = pv.Plotter()
 plotter.add_mesh(initial_surface, color="red", opacity=0.8)
 plotter.add_mesh(final_surface, color="blue", opacity=0.8)
 plotter.show()
+
+
+# 5. Save to CSV
+debug = pd.concat(history, ignore_index=True)
+debug.to_csv("level_set_debug.csv", index=False)
