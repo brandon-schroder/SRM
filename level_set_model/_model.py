@@ -102,6 +102,8 @@ class LSSolver:
 
         self._get_geometry(sdf="propellant")
 
+        self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
+
         self.state.t += dt
         return dt, self.state.t
 

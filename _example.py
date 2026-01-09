@@ -104,7 +104,6 @@ while solver.t < coupled_conf.t_end:
         break
 
 
-solver.ls.grid.pv_grid["propellant"] = solver.ls.state.phi.flatten(order='F')
 final_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
 
 z=100*1E-3
