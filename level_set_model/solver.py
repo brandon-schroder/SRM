@@ -72,13 +72,14 @@ class LSSolver:
         cart_coords = self.grid.cart_coords
 
         if sdf == "propellant":
-            z_distances, areas, perimeters = calculate_axial_distributions(phi, phi_cas, cart_coords)
+            z_distances, areas, perimeters, wetted_perimeters = calculate_axial_distributions(phi, phi_cas, cart_coords)
 
             self.state.x = z_distances
             self.state.A_propellant = areas*self.cfg.n_periodics
             self.state.P_propellant = perimeters*self.cfg.n_periodics
+            self.state.P_wetted = wetted_perimeters * self.cfg.n_periodics
         elif sdf == "casing":
-            z_distances, areas, _ = calculate_axial_distributions(phi_cas, phi_cas, cart_coords)
+            z_distances, areas, _, _ = calculate_axial_distributions(phi_cas, phi_cas, cart_coords)
 
             self.state.x = z_distances
             self.state.A_casing = areas*self.cfg.n_periodics

@@ -11,6 +11,7 @@ def main():
     x_geom = df['x'] * 1e-3
     A_geom = df['a'] * 1e-6
     P_geom = np.ones_like(x_geom) * 1E-0
+    P_wetted = P_geom
 
     # ---------------------------------------------------------
     # 1. Configuration
@@ -43,7 +44,7 @@ def main():
 
     solver = IBSolver(config)
 
-    solver.set_geometry(x_geom, A_geom, P_geom)
+    solver.set_geometry(x_geom, A_geom, P_geom, P_wetted)
 
     solver.initialize()
 

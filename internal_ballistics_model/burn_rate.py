@@ -3,7 +3,7 @@ from .config import *
 def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, model="MP"):
 
     port_area = state.A
-    port_perimeter = state.P.mean()
+    port_perimeter = state.P_wetted
 
     rho_p = config.rho_p
     rho = state.rho
@@ -43,6 +43,8 @@ def burn_rate(config: SimulationConfig, state: FlowState, model="MP"):
     exponent = config.n_exp
 
     pressure = state.p
+
+    wetted_perim = state.P_wetted * 0
 
     base_burn_rate = coefficient * pressure ** exponent
 

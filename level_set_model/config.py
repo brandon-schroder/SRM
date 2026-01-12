@@ -40,6 +40,7 @@ class State:
     A_propellant: np.ndarray = field(init=False)
     A_casing: np.ndarray = field(init=False)
     P_propellant: np.ndarray = field(init=False)
+    P_wetted: np.ndarray = field(init=False)
     x: np.ndarray = field(init=False)
     br: np.ndarray = field(init=False)
 
@@ -51,5 +52,6 @@ class State:
         self.A_propellant = np.zeros(self.dims[2])
         self.A_casing = np.zeros(self.dims[2])
         self.P_propellant = np.zeros(self.dims[2])
+        self.P_wetted = np.zeros(self.dims[2])
         self.x = np.zeros(self.dims[2])
         self.br = np.zeros(self.dims)

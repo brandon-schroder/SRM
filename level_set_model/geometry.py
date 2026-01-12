@@ -270,16 +270,18 @@ def segments_list_to_array(segment_list):
 def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
     """Processes a 2D slice to calculate the primary contour area and perimeter."""
     contour_list = marching_cubes(phi_slice, x_slice, y_slice)
-    if len(contour_list) == 0: return 0.0, 0.0
+    if len(contour_list) == 0: return 0.0, 0.0, 0.0
 
     raw_segments = segments_list_to_array(contour_list)
     all_curves = make_continuous_contour(raw_segments)
     valid_curves = filter_curves(all_curves)
 
-    if len(valid_curves) == 0: return 0.0, 0.0
+    if len(valid_curves) == 0: return 0.0, 0.0, 0.0
 
     ordered_segments, ordered_points = valid_curves[0]
     area = contour_bounded_area(ordered_points)
+
+    wetted_perimeter = contour_length(ordered_segments)
 
     perimeter = 0.0
     casing_list = marching_cubes(phicas_slice, x_slice, y_slice)
@@ -295,7 +297,7 @@ def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
     else:
         perimeter = contour_length(ordered_segments)
 
-    return area, perimeter
+    return area, perimeter, wetted_perimeter
 
 
 @njit(parallel=True, cache=save_cache)
@@ -307,13 +309,14 @@ def calculate_axial_distributions(phi, phi_cas, cart_coords):
 
     z_distances = np.zeros(n_z, dtype=np.float64)
     areas = np.zeros(n_z, dtype=np.float64)
-    perimeters = np.zeros(n_z, dtype=np.float64)
+    burning_perimeters = np.zeros(n_z, dtype=np.float64)
+    wetted_perimeters = np.zeros(n_z, dtype=np.float64)
 
     for k in prange(n_z):
         z_distances[k] = z_coords[0, 0, k]
-        areas[k], perimeters[k] = process_slice_geometry(
+        areas[k], burning_perimeters[k], wetted_perimeters[k] = process_slice_geometry(
             phi_combined[..., k], phi_cas[..., k],
             x_coords[..., k], y_coords[..., k]
         )
 
-    return z_distances, areas, perimeters
+    return z_distances, areas, burning_perimeters, wetted_perimeters

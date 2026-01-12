@@ -58,6 +58,7 @@ class FlowState:
     A: np.ndarray = field(init=False)
     dAdz: np.ndarray = field(init=False)
     P: np.ndarray = field(init=False)
+    P_wetted: np.ndarray = field(init=False)
 
     br: np.ndarray = field(init=False)
     eta: np.ndarray = field(init=False)
@@ -72,6 +73,7 @@ class FlowState:
         self.A = np.zeros(shape)
         self.dAdz = np.zeros(shape)
         self.P = np.zeros(shape)
+        self.P_wetted = np.zeros(shape)
 
         self.br = np.zeros(shape)
         self.eta = np.zeros(shape)
