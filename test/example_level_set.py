@@ -17,6 +17,10 @@ def main():
     # Note: theta bounds (indices 2, 3) are automatically handled by
     # n_periodics in the grid generation, but we provide placeholders.
     bounds = [10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 100.0*1e-3]
+    br_initial = 0.00001e-3
+
+    x_ib = np.linspace(bounds[4], bounds[5], 100)
+    br_ib = np.ones_like(x_ib) * br_initial
 
     config = SimulationConfig(
         n_periodics=11,  # Number of symmetric segments
@@ -48,7 +52,7 @@ def main():
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
 
     history_t = []
-    history_A_mid = []  # Track area at the middle of the grain
+    history_A_mid = []  # Track the area at the middle of the grain
 
     # Index for the middle of the domain to monitor
     mid_idx = config.size[2] // 2
@@ -57,10 +61,13 @@ def main():
         # Perform one step
         dt, current_time = solver.step()
 
+        # Update burn rate from the internal ballistics model
+        solver.state.br = solver.set_burn_rate(x_ib, br_ib)
+
         # Monitor progress every 10 steps
         step_count = int(solver.state.t / dt)
         if step_count % 1 == 0:
-            # We can access solver state variables cleanly
+            # We can access solver state variables cleanly,
             # For example, checking the average value of the level set field
             avg_phi = np.mean(solver.state.phi)
             print(f"t={current_time:.5f}s | dt={dt:.2e} | Avg Phi={avg_phi:.2e}")

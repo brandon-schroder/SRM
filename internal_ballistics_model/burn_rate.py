@@ -2,12 +2,12 @@ from .config import *
 
 def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, model="MP"):
 
-    port_area = state.A[-config.ng]
+    port_area = state.A
     port_perimeter = state.P.mean()
 
     rho_p = config.rho_p
-    rho = state.rho.mean()
-    mf_port = state.rho[-config.ng] * state.u[-config.ng] * port_area
+    rho = state.rho
+    mf_port = state.rho * state.u * port_area
 
 
     if model=="MP":
@@ -18,7 +18,8 @@ def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, m
         m = config.erosive_m
         gth = config.erosive_gth
 
-        Dh = 4 * port_area / port_perimeter
+        # Dh = 4 * port_area / port_perimeter
+        Dh = 2.0 * np.sqrt(port_area / np.pi) # more stable, but assumes circular profile
 
         Re0 = rho * base_burn_rate * Dh / mu
 
@@ -26,7 +27,7 @@ def erosive_models(base_burn_rate, config: SimulationConfig, state: FlowState, m
         g0 = G / (rho_p * base_burn_rate)
         g = g0 * K2 * Re0 ** m
 
-        H = 1.0 if g > gth else 0.0  # Heaviside function
+        H = np.where(g > gth, 1.0, 0.0)  # Heaviside function
 
         eta = 1 + K1 * (g ** 0.8 - gth ** 0.8) * H
 
@@ -41,7 +42,7 @@ def burn_rate(config: SimulationConfig, state: FlowState, model="MP"):
     coefficient = config.a_coef
     exponent = config.n_exp
 
-    pressure = state.p.max()
+    pressure = state.p
 
     base_burn_rate = coefficient * pressure ** exponent
 

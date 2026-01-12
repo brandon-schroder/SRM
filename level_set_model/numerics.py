@@ -126,7 +126,7 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
         if max_grad_i < 1e-12:
             continue                                    # nothing moving here
 
-        wave_speed = br                                 # local max propagation speed
+        wave_speed = br.max()                                 # local max propagation speed
 
         # Effective grid spacing in θ-direction at this radius
         h_theta = r_i * dtheta

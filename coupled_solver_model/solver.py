@@ -55,7 +55,7 @@ class CoupledSolver:
         # based on the current burn rate and grid resolution.
 
         # Update LS burn rate with the latest from IB
-        self.ls.state.br = self.ib.state.br
+        self.ls.state.br = self.ls.set_burn_rate(self.ib.grid.x_coords, self.ib.state.br)
 
         # Take one step with Level Set solver
         dt_ls, t_ls_next = self.ls.step()

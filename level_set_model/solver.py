@@ -49,7 +49,7 @@ class LSSolver:
         self._get_geometry("casing")
 
         self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
-        self.state.br = self.cfg.br_initial
+        self.state.br = self.state.br + self.cfg.br_initial
         self.state.t = 0.0
 
 
@@ -63,7 +63,7 @@ class LSSolver:
 
         self.state.grad_mag = weno_godunov(phi_full, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
 
-        return -self.state.br * self.state.grad_mag
+        return -self.state.br[self.grid.interior] * self.state.grad_mag
 
     def _get_geometry(self, sdf="propellant"):
 
@@ -82,6 +82,16 @@ class LSSolver:
 
             self.state.x = z_distances
             self.state.A_casing = areas*self.cfg.n_periodics
+
+    def set_burn_rate(self, x: np.ndarray, br: np.ndarray):
+
+        # Get the Z-coordinates of the 3D grid (Axial direction)
+        z_ls = self.grid.polar_coords[2]
+
+        # Interpolate the 1D burn rate onto the 3D grid
+        self.state.br = np.interp(z_ls, x, br)
+
+        return self.state.br
 
 
     def step(self) -> Tuple[float, float]:

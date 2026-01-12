@@ -32,7 +32,6 @@ class State:
     """
     dims: tuple[int, int, int]
     t: float = 0.0
-    br: float = 0.0
 
     # Arrays
     phi: np.ndarray = field(init=False)
@@ -42,6 +41,7 @@ class State:
     A_casing: np.ndarray = field(init=False)
     P_propellant: np.ndarray = field(init=False)
     x: np.ndarray = field(init=False)
+    br: np.ndarray = field(init=False)
 
     def __post_init__(self):
 
@@ -52,3 +52,4 @@ class State:
         self.A_casing = np.zeros(self.dims[2])
         self.P_propellant = np.zeros(self.dims[2])
         self.x = np.zeros(self.dims[2])
+        self.br = np.zeros(self.dims)

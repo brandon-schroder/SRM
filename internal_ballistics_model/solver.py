@@ -20,14 +20,14 @@ class IBSolver:
         self.state = FlowState(n_cells=self.grid.dims[0])
 
 
-    def set_geometry(self, x_imp: np.ndarray, A_imp: np.ndarray, P_imp: np.ndarray):
+    def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray):
         """
         Interpolates external geometry onto the grid.
         CRITICAL: Clamps Area to prevent division by zero in boundary conditions.
         """
         # Interpolate onto the solver's x coordinates (including ghosts)
-        self.state.A = np.interp(self.grid.x_coords, x_imp, A_imp)
-        self.state.P = np.interp(self.grid.x_coords, x_imp, P_imp)
+        self.state.A = np.interp(self.grid.x_coords, x, A)
+        self.state.P = np.interp(self.grid.x_coords, x, P)
 
         # Calculate gradients (Central Difference)
         self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * self.grid.dx)
@@ -42,7 +42,7 @@ class IBSolver:
         self.state.rho[:] = self.cfg.p_inf / (self.cfg.R * self.cfg.t_initial)
         self.state.p[:] = self.cfg.p_inf
         self.state.u[:] = self.cfg.u_initial
-        self.state.br = self.cfg.br_initial
+        self.state.br = self.state.br + self.cfg.br_initial
 
         self.state.U = primitive_to_conserved(
             self.state.rho, self.state.u, self.state.p,self.state.A, self.cfg.gamma
@@ -87,7 +87,7 @@ class IBSolver:
 
         # Source Terms
         S = source_jit(
-            self.cfg.rho_p, self.cfg.Tf, self.state.br,
+            self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior],
             self.cfg.R, self.cfg.gamma, self.state.p[self.grid.interior],
             self.state.P[self.grid.interior], self.state.dAdz[self.grid.interior]
         )

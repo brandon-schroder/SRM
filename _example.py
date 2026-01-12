@@ -7,7 +7,7 @@ import coupled_solver_model
 import internal_ballistics_model
 import level_set_model
 
-bounds=[10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 1035.0*1e-3]
+bounds=[10.0*1e-3, 35.0*1e-3, None, None, 0.0*1e-3, 918.5*1e-3] # 1035.5
 prop_file = Path("test\\geometry\\07R-SRM-Propellant.STL")
 case_file = Path("test\\geometry\\07R-SRM-Casing.STL")
 
@@ -40,7 +40,7 @@ ls_config = level_set_model.config.SimulationConfig(
     file_case=case_file,  # Casing SDF input
 
     ng=3,  # Ghost cells
-    CFL=0.5,  # Stability factor
+    CFL=0.8,  # Stability factor
     t_end=20.0,  # Simulation duration
     br_initial=10.0e-3  # Initial burn rate
 )
@@ -66,7 +66,6 @@ while solver.t < coupled_conf.t_end:
     dt_ls, t_current = solver.step()
 
     p_head = solver.ib.state.p.max()
-    br_curr = solver.ib.state.br
 
     # Create small DF for this step
     df_step = pd.DataFrame({
@@ -100,7 +99,7 @@ while solver.t < coupled_conf.t_end:
 
 
 
-    print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa | BR: {br_curr * 1000:.2f} mm/s")
+    print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa |")
 
     if t_current >= coupled_conf.t_end or p_head < ib_config.p_inf:
         break

@@ -26,8 +26,3 @@ class Grid1D:
         # 3. Define the "Interior" slice for easy access
         # This allows solver.u[grid.interior] to skip ghost cells
         self.interior = slice(self.ng, -self.ng)
-
-    @property
-    def x_interior(self):
-        """Helper to get only the physical coordinates (no ghosts)."""
-        return self.x_coords[self.interior]

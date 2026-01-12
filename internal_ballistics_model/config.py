@@ -48,8 +48,6 @@ class FlowState:
     """
     n_cells: int
     t: float = 0.0
-    br: float = 0.0
-    eta: float = 1.0
 
     # Arrays
     U: np.ndarray = field(init=False)
@@ -61,6 +59,9 @@ class FlowState:
     dAdz: np.ndarray = field(init=False)
     P: np.ndarray = field(init=False)
 
+    br: np.ndarray = field(init=False)
+    eta: np.ndarray = field(init=False)
+
     def __post_init__(self):
         shape = (self.n_cells,)
         self.U = np.zeros((3, self.n_cells))
@@ -71,3 +72,6 @@ class FlowState:
         self.A = np.zeros(shape)
         self.dAdz = np.zeros(shape)
         self.P = np.zeros(shape)
+
+        self.br = np.zeros(shape)
+        self.eta = np.zeros(shape)
