@@ -1,7 +1,6 @@
 from pathlib import Path
 import pyvista as pv
 import pandas as pd
-import numpy as np
 
 import coupled_solver_model
 import internal_ballistics_model
@@ -83,20 +82,7 @@ while solver.t < coupled_conf.t_end:
     z_distances = solver.ls.state.x
 
 
-    if 1 > solver.t > 2:
-        print(f"Warning: bad area detected")
-        # Save all fields required to run 'calculate_axial_distributions'
-        np.savez_compressed(
-            "debug_state.npz",
-            pv_grid=solver.ls.grid.pv_grid,
-            phi=solver.ls.state.phi,
-            casing=solver.ls.state.casing,
-            cart_coords=solver.ls.grid.cart_coords,
-            t=solver.t
-        )
-
     # ========================================================
-
 
 
     print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa |")
@@ -107,17 +93,17 @@ while solver.t < coupled_conf.t_end:
 
 final_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
 
-z=100*1E-3
+# z=880*1E-3
+# initial_surface = initial_surface.slice(normal='z', origin=(0, 0, z))
+# final_surface = final_surface.slice(normal='z', origin=(0, 0, z))
 
-initial_surface = initial_surface.slice(normal='z', origin=(0, 0, z))
-final_surface = final_surface.slice(normal='z', origin=(0, 0, z))
+b=final_surface.bounds
+n=ls_config.size[2]/2
+initial_surface = initial_surface.slice_along_axis(axis='z', n=20, bounds=[b[0], b[1], b[2], b[3], 800E-3, b[5]])
+final_surface = final_surface.slice_along_axis(axis='z', n=20, bounds=[b[0], b[1], b[2], b[3], 800E-3, b[5]])
 
 plotter = pv.Plotter()
 plotter.add_mesh(initial_surface, color="red", opacity=0.8)
 plotter.add_mesh(final_surface, color="blue", opacity=0.8)
 plotter.show()
 
-
-# 5. Save to CSV
-debug = pd.concat(history, ignore_index=True)
-debug.to_csv("level_set_debug.csv", index=False)
