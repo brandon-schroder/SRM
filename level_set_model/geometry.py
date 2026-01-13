@@ -7,7 +7,7 @@ BIT_TR = 2
 BIT_BR = 4
 BIT_BL = 8
 
-save_cache = False
+save_cache = True
 
 @njit(fastmath=True, cache=save_cache)
 def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
