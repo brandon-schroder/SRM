@@ -2,38 +2,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Import our new modules
+# 1. Import the Recorder
 from internal_ballistics_model import SimulationConfig, IBSolver
+from internal_ballistics_model.recorder import IBRecorder
+
 
 def main():
-
     df = pd.read_csv('nozzle_area_dist.csv')
     x_geom = df['x'] * 1e-3
     A_geom = df['a'] * 1e-6
     P_geom = np.ones_like(x_geom) * 1E-0
+
+    for i in range(len(x_geom)): # No propellant in the nozzle
+        if x_geom[i] > 0.1:
+            P_geom[i] = 0.0
+
     P_wetted = P_geom
 
     # ---------------------------------------------------------
     # 1. Configuration
     # ---------------------------------------------------------
-    # Note: IDE autocompletion works here!
     config = SimulationConfig(
-        # Grid parameters
-        n_cells=200,  # Spatial resolution
-        ng=3,  # Ghost cells
-        bounds=(x_geom.min(), x_geom.max()),  # Domain length (meters)
-        CFL=0.5,  # Stability factor
-        t_end=0.005,  # Simulation duration
-
-        # Initial Conditions
-        p0_inlet=3.5e6,  # 3.5 MPa Chamber Pressure
-        p_inf=100.0e3,  # 1 atm Ambient Pressure
-
-        rho_p=1600.0,  # Propellant Density
+        n_cells=200,
+        ng=3,
+        bounds=(x_geom.min(), x_geom.max()),
+        CFL=0.8,
+        t_end=0.005,
+        p0_inlet=105.0e3,
+        p_inf=100.0e3,
+        rho_p=1600.0,
         a_coef=0.000035,
         n_exp=0.36,
-        br_initial=1e-3,
-
+        br_initial=0,
     )
 
     print(f"--- Initializing Simulation: {config.n_cells} cells ---")
@@ -41,71 +41,112 @@ def main():
     # ---------------------------------------------------------
     # 2. Solver Setup
     # ---------------------------------------------------------
-
     solver = IBSolver(config)
-
     solver.set_geometry(x_geom, A_geom, P_geom, P_wetted)
-
     solver.initialize()
 
     # ---------------------------------------------------------
-    # 5. Main Loop
+    # 3. Recorder Setup (NEW)
+    # ---------------------------------------------------------
+    # We pass the solver instance so the recorder can access .state and .cfg
+    recorder = IBRecorder("output_ib.h5", solver)
+
+    # ---------------------------------------------------------
+    # 4. Main Loop
     # ---------------------------------------------------------
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
-
-    # Lists to store history for plotting later (optional)
-    history_p_head = []
-    history_time = []
 
     while solver.state.t < config.t_end:
         dt, current_time = solver.step()
 
-        # Monitor progress every 50 steps
+        # --- Save Data (NEW) ---
+        recorder.save()
+
+        # Monitor progress every 1000 steps
         step_count = int(solver.state.t / dt)
         if step_count % 1000 == 0:
-            # We can access solver state variables cleanly
-            max_p = np.max(solver.state.p) / 1e5  # Convert Pa to Bar
-            max_u = np.max(solver.state.u)
-            print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} bar | U_max={max_u:.1f} m/s")
-
-        # Record head-end pressure
-        history_p_head.append(solver.state.p[solver.grid.interior][0])
-        history_time.append(current_time)
+            max_p = np.max(solver.state.p) / 1e5
+            print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} bar")
 
     # ---------------------------------------------------------
     # 6. Post-Processing
     # ---------------------------------------------------------
-    print(f"\nSimulation Complete (t = {solver.state.t} s)")
+    print(f"\nSimulation Complete (t = {solver.state.t:.4f} s)")
+    print("Fetching data from output_ib.h5...")
 
-    # Get the final state as a DataFrame
-    df = solver.get_dataframe()
-    print(df.head())
+    import h5py
 
-    # Plot Results
-    fig, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+    # Open the HDF5 file
+    with h5py.File("output_ib.h5", "r") as f:
+        # 1. Load Spatial Data (Fields)
+        # We access the last timestep using index -1
+        p_final = f["fields/pressure"][-1, :]
+        u_final = f["fields/velocity"][-1, :]
+        rho_final = f["fields/density"][-1, :]
+        A_final = f["fields/area"][-1, :]
+
+        # We can get X coordinates from the solver (easiest)
+        # or from the file if we saved them. Let's use the solver's grid.
+        x_grid = solver.grid.x_coords
+
+        # 2. Load Time-Series Data (Scalars)
+        t_hist = f["timeseries/time"][:]
+        p_head_hist = f["timeseries/p_head"][:]
+        thrust_hist = f["timeseries/thrust"][:]
+
+        # 3. Retrieve Summary Metrics
+        if "summary" in f:
+            total_impulse = f["summary"].attrs["total_impulse"]
+            print(f"Total Impulse: {total_impulse:.2f} Ns")
+
+    # --- Plotting ---
+
+    # Figure 1: Spatial Distribution (Final State)
+    fig1, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
     # Plot 1: Pressure
-    ax[0].plot(df['x'], df['p'] / 1e5, 'r-', linewidth=2)
+    ax[0].plot(x_grid, p_final / 1e5, 'r-', linewidth=2)
     ax[0].set_ylabel('Pressure [bar]')
     ax[0].set_title(f'Internal Ballistics State at t={solver.state.t:.4f}s')
     ax[0].grid(True, alpha=0.3)
 
-    # Plot 2: Velocity & Mach
-    ax[1].plot(df['x'], df['u'], 'b-', label='Velocity')
+    # Plot 2: Velocity
+    ax[1].plot(x_grid, u_final, 'b-', label='Velocity')
     ax[1].set_ylabel('Velocity [m/s]')
     ax[1].grid(True, alpha=0.3)
 
-    # Plot 3: Geometry Check
-    ax[2].fill_between(df['x'], 0, df['Area'], color='gray', alpha=0.5, label='Nozzle Area')
+    # Plot 3: Geometry & Mach
+    ax[2].fill_between(x_grid, 0, A_final, color='gray', alpha=0.5, label='Nozzle Area')
     ax[2].set_ylabel('Area [m^2]')
     ax[2].set_xlabel('Position [m]')
     ax[2].grid(True, alpha=0.3)
 
-    # Calculate Mach (u/c)
-    mach = df['u'] / np.sqrt(config.gamma * df['p'] / df['rho'])
+    # Calculate Mach (u / c) for the final state
+    # We can recalculate 'c' or save it. Recalculating is easy:
+    gamma = config.gamma
+    c_final = np.sqrt(gamma * p_final / (rho_final + 1e-16))
+    mach_final = u_final / (c_final + 1e-16)
+
     ax2_twin = ax[2].twinx()
-    ax2_twin.plot(df['x'], mach, 'k--', label='Mach')
+    ax2_twin.plot(x_grid, mach_final, 'k--', label='Mach')
     ax2_twin.set_ylabel('Mach Number')
+
+    plt.tight_layout()
+
+    # Figure 2: Time History (New!)
+    fig2, ax_hist = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+
+    # History 1: Pressure
+    ax_hist[0].plot(t_hist, p_head_hist / 1e6, 'r-')
+    ax_hist[0].set_ylabel('Head Pressure [MPa]')
+    ax_hist[0].set_title('Simulation History')
+    ax_hist[0].grid(True, alpha=0.3)
+
+    # History 2: Thrust
+    ax_hist[1].plot(t_hist, thrust_hist / 1000, 'k-')
+    ax_hist[1].set_ylabel('Thrust [kN]')
+    ax_hist[1].set_xlabel('Time [s]')
+    ax_hist[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.show()
