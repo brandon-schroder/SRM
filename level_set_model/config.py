@@ -24,6 +24,9 @@ class SimulationConfig:
     # Initial & Boundary Conditions
     br_initial: float = 1.0E-6
 
+    output_filename: str = "output.h5"
+    vtk_dir: str = "vtk_output"
+
 
 @dataclass
 class State:
