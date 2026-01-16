@@ -70,6 +70,7 @@ class FlowState:
         self.u = np.zeros(shape)
         self.p = np.zeros(shape)
         self.c = np.zeros(shape)
+
         self.A = np.zeros(shape)
         self.dAdz = np.zeros(shape)
         self.P = np.zeros(shape)

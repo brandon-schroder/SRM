@@ -90,11 +90,8 @@ class IBRecorder(HDF5Logger):
             p_head = f["timeseries/p_head"][:]
 
             if len(t) > 1:
-                # Support both NumPy 2.0 and 1.x
-                if hasattr(np, 'trapezoid'):
-                    total_impulse = np.trapezoid(F, x=t)
-                else:
-                    total_impulse = np.trapz(F, x=t)
+
+                total_impulse = np.trapezoid(F, x=t)
                 max_p_head = np.max(p_head)
             else:
                 total_impulse = 0.0
