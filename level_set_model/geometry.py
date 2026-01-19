@@ -1,322 +1,288 @@
 import numpy as np
 from numba import njit, prange
 
-# --- Constants for Marching Squares ---
-BIT_TL = 1
-BIT_TR = 2
-BIT_BR = 4
-BIT_BL = 8
 
-save_cache = True
+# ==============================================================================
+# PART 1: SIMPLEX GRID LOGIC
+# ==============================================================================
 
-@njit(fastmath=True, cache=save_cache)
-def get_intersection(p1_phi, p2_phi, p1_x, p1_y, p2_x, p2_y):
-    """Finds the (x, y) coordinate of the zero-crossing using linear interpolation."""
-    if p2_phi == p1_phi:
-        return np.array([p1_x, p1_y])
-    t = -p1_phi / (p2_phi - p1_phi)
-    t = max(0.0, min(1.0, t))
-    x = p1_x + t * (p2_x - p1_x)
-    y = p1_y + t * (p2_y - p1_y)
-    return np.array([x, y])
+class SimplexGrid:
+    def __init__(self, grid):
+        self.grid = grid
+        shape = grid.cart_coords.shape
+        self.nx_dual = shape[1] - 1
+        self.ny_dual = shape[2] - 1
+        self.nz_dual = shape[3] - 1
 
-
-@njit(fastmath=True, cache=save_cache)
-def marching_cubes(phi_slice, x_coords, y_coords):
-    """Extracts the contour segments (as a Numba List) of the zero-level set."""
-    contour_segments = []
-    n_r, n_t = phi_slice.shape
-    p_top = np.zeros(2)
-    p_bot = np.zeros(2)
-    p_left = np.zeros(2)
-    p_right = np.zeros(2)
+        # Kuhn Triangulation Offsets (6 tets per cube)
+        self.tet_offsets = np.array([
+            [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]],  # Tet 0
+            [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1]],  # Tet 1
+            [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]],  # Tet 2
+            [[0, 0, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1]],  # Tet 3
+            [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1]],  # Tet 4
+            [[0, 0, 0], [0, 0, 1], [0, 1, 1], [1, 1, 1]],  # Tet 5
+        ], dtype=np.int8)
 
 
-    for j in range(n_t - 1): # Outer loop: Slow dimension
-        for i in range(n_r - 1): # Inner loop: Fast dimension (contiguous)
-            phi_A = phi_slice[i, j]
-            phi_B = phi_slice[i, j + 1]
-            phi_C = phi_slice[i + 1, j + 1]
-            phi_D = phi_slice[i + 1, j]
+# ==============================================================================
+# PART 2: INTEGRATOR KERNELS
+# ==============================================================================
 
-            case = 0
-            if phi_A > 0: case |= BIT_TL
-            if phi_B > 0: case |= BIT_TR
-            if phi_C > 0: case |= BIT_BR
-            if phi_D > 0: case |= BIT_BL
+EDGES = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], dtype=np.int8)
+NODE_TO_EDGES = np.array([[0, 1, 2], [0, 3, 4], [1, 3, 5], [2, 4, 5]], dtype=np.int8)
 
-            if case == 0 or case == 15:
-                continue
+LUT_PRISM_EDGES = np.full((16, 4), -1, dtype=np.int8)
+LUT_PRISM_EDGES[3] =  [1, 2, 4, 3]
+LUT_PRISM_EDGES[5] =  [0, 2, 5, 3]
+LUT_PRISM_EDGES[6] =  [0, 1, 5, 4]
+LUT_PRISM_EDGES[9] =  [0, 4, 5, 1]
+LUT_PRISM_EDGES[10] = [0, 3, 5, 2]
+LUT_PRISM_EDGES[12] = [1, 3, 4, 2]
 
-            x_A, y_A = x_coords[i, j], y_coords[i, j]
-            x_B, y_B = x_coords[i, j + 1], y_coords[i, j + 1]
-            x_C, y_C = x_coords[i + 1, j + 1], y_coords[i + 1, j + 1]
-            x_D, y_D = x_coords[i + 1, j], y_coords[i + 1, j]
+LUT_PRISM_NODES = np.full((16, 2), -1, dtype=np.int8)
+LUT_PRISM_NODES[3] =  [0, 1]
+LUT_PRISM_NODES[5] =  [0, 2]
+LUT_PRISM_NODES[6] =  [1, 2]
+LUT_PRISM_NODES[9] =  [0, 3]
+LUT_PRISM_NODES[10] = [1, 3]
+LUT_PRISM_NODES[12] = [2, 3]
 
-            if (phi_A > 0) != (phi_B > 0):
-                p_top = get_intersection(phi_A, phi_B, x_A, y_A, x_B, y_B)
-            if (phi_B > 0) != (phi_C > 0):
-                p_right = get_intersection(phi_B, phi_C, x_B, y_B, x_C, y_C)
-            if (phi_D > 0) != (phi_C > 0):
-                p_bot = get_intersection(phi_D, phi_C, x_D, y_D, x_C, y_C)
-            if (phi_A > 0) != (phi_D > 0):
-                p_left = get_intersection(phi_A, phi_D, x_A, y_A, x_D, y_D)
-
-            if case == 1 or case == 14:
-                contour_segments.append(np.array([p_left[0], p_left[1], p_top[0], p_top[1]]))
-            elif case == 2 or case == 13:
-                contour_segments.append(np.array([p_top[0], p_top[1], p_right[0], p_right[1]]))
-            elif case == 3 or case == 12:
-                contour_segments.append(np.array([p_left[0], p_left[1], p_right[0], p_right[1]]))
-            elif case == 4 or case == 11:
-                contour_segments.append(np.array([p_right[0], p_right[1], p_bot[0], p_bot[1]]))
-            elif case == 5 or case == 10:
-                phi_center = (phi_A + phi_B + phi_C + phi_D) / 4.0
-                if (case == 5 and phi_center > 0) or (case == 10 and phi_center <= 0):
-                    contour_segments.append(np.array([p_left[0], p_left[1], p_bot[0], p_bot[1]]))
-                    contour_segments.append(np.array([p_top[0], p_top[1], p_right[0], p_right[1]]))
-                else:
-                    contour_segments.append(np.array([p_left[0], p_left[1], p_top[0], p_top[1]]))
-                    contour_segments.append(np.array([p_right[0], p_right[1], p_bot[0], p_bot[1]]))
-            elif case == 6 or case == 9:
-                contour_segments.append(np.array([p_top[0], p_top[1], p_bot[0], p_bot[1]]))
-            elif case == 7 or case == 8:
-                contour_segments.append(np.array([p_left[0], p_left[1], p_bot[0], p_bot[1]]))
-    return contour_segments
+LUT_PRISM_ORDER = np.zeros((16, 4), dtype=np.int8)
+for i in range(16): LUT_PRISM_ORDER[i] = [0, 1, 2, 3]
+LUT_PRISM_ORDER[6] = [3, 0, 1, 2]
+LUT_PRISM_ORDER[9] = [3, 0, 1, 2]
 
 
-@njit(fastmath=True, cache=save_cache)
-def build_graph(segments_array):
-    """Constructs an adjacency graph from a list of segments."""
-    n_segs = len(segments_array)
-    points_list = []
-    point_to_idx = {}
-
-    for seg in segments_array:
-        for i in range(2):
-            x, y = seg[i * 2], seg[i * 2 + 1]
-            key = (x, y)
-            if key not in point_to_idx:
-                point_to_idx[key] = len(points_list)
-                points_list.append(key)
-
-    n_points = len(points_list)
-    max_neighbors = 2 * n_segs
-    adjacency = np.full((n_points, max_neighbors), -1, dtype=np.int32)
-    degree = np.zeros(n_points, dtype=np.int32)
-
-    for seg in segments_array:
-        p1, p2 = (seg[0], seg[1]), (seg[2], seg[3])
-        idx1, idx2 = point_to_idx[p1], point_to_idx[p2]
-        adjacency[idx1, degree[idx1]] = idx2
-        degree[idx1] += 1
-        adjacency[idx2, degree[idx2]] = idx1
-        degree[idx2] += 1
-
-    return adjacency, degree, points_list
+@njit(cache=True, fastmath=True)
+def _vol_tet(a, b, c, d):
+    cx = (b[1] - d[1]) * (c[2] - d[2]) - (b[2] - d[2]) * (c[1] - d[1])
+    cy = (b[2] - d[2]) * (c[0] - d[0]) - (b[0] - d[0]) * (c[2] - d[2])
+    cz = (b[0] - d[0]) * (c[1] - d[1]) - (b[1] - d[1]) * (c[0] - d[0])
+    return abs((a[0] - d[0]) * cx + (a[1] - d[1]) * cy + (a[2] - d[2]) * cz) / 6.0
 
 
-@njit(fastmath=True, cache=save_cache)
-def traverse_graph_path(adjacency, edge_used, start_node):
-    """Finds a single continuous path using Hierholzer's algorithm logic."""
-    stack = [start_node]
-    path = []
-    while len(stack) > 0:
-        u = stack[-1]
-        if edge_used[u] > 0:
-            edge_used[u] -= 1
-            v = adjacency[u, edge_used[u]]
-            for i in range(edge_used[v]):
-                if adjacency[v, i] == u:
-                    adjacency[v, i] = adjacency[v, edge_used[v] - 1]
-                    edge_used[v] -= 1
-                    break
-            stack.append(v)
+@njit(cache=True, fastmath=True)
+def _area_tri_proj(p1, p2, p3):
+    cx = (p2[1] - p1[1]) * (p3[2] - p1[2]) - (p2[2] - p1[2]) * (p3[1] - p1[1])
+    cy = (p2[2] - p1[2]) * (p3[0] - p1[0]) - (p2[0] - p1[0]) * (p3[2] - p1[2])
+    return 0.5 * np.sqrt(cx * cx + cy * cy)
+
+
+@njit(cache=True)
+def _get_intersections(coords, phi):
+    pts = np.zeros((6, 3), dtype=np.float64)
+    ts = np.zeros(6, dtype=np.float64)
+    for i in range(6):
+        m, n = EDGES[i]
+        pm, pn = phi[m], phi[n]
+        denom = pm - pn
+        t = 0.0
+        if denom != 0:
+            t = pm / denom
+            if t < 0.0:
+                t = 0.0
+            elif t > 1.0:
+                t = 1.0
+        ts[i] = t
+        for k in range(3):
+            pts[i, k] = coords[m, k] + t * (coords[n, k] - coords[m, k])
+    return pts, ts
+
+
+@njit(parallel=True, cache=True)
+def integrate_volume_kernel(nodes, phi_vals):
+    n_tets = nodes.shape[0]
+    total_volume = 0.0
+    for i in prange(n_tets):
+        mask = 0
+        if phi_vals[i, 0] > 0: mask |= 1
+        if phi_vals[i, 1] > 0: mask |= 2
+        if phi_vals[i, 2] > 0: mask |= 4
+        if phi_vals[i, 3] > 0: mask |= 8
+
+        if mask == 0: continue
+        full_vol = _vol_tet(nodes[i, 0], nodes[i, 1], nodes[i, 2], nodes[i, 3])
+        if mask == 15:
+            total_volume += full_vol
+            continue
+
+        pts, _ = _get_intersections(nodes[i], phi_vals[i])
+
+        if mask in [1, 2, 4, 8]:
+            node_idx = {1: 0, 2: 1, 4: 2, 8: 3}[mask]
+            e = NODE_TO_EDGES[node_idx]
+            total_volume += _vol_tet(nodes[i, node_idx], pts[e[0]], pts[e[1]], pts[e[2]])
+        elif mask in [14, 13, 11, 7]:
+            out_node = {14: 0, 13: 1, 11: 2, 7: 3}[mask]
+            e = NODE_TO_EDGES[out_node]
+            total_volume += (full_vol - _vol_tet(nodes[i, out_node], pts[e[0]], pts[e[1]], pts[e[2]]))
         else:
-            path.append(stack.pop())
-    return path
+            edge_idxs = LUT_PRISM_EDGES[mask]
+            if edge_idxs[0] != -1:
+                node_idxs = LUT_PRISM_NODES[mask]
+                perm = LUT_PRISM_ORDER[mask]
+                p_ring = np.empty((4, 3), dtype=np.float64)
+                for k in range(4): p_ring[k] = pts[edge_idxs[k]]
+                nA, nB = nodes[i, node_idxs[0]], nodes[i, node_idxs[1]]
+                q0, q1, q2, q3 = p_ring[perm[0]], p_ring[perm[1]], p_ring[perm[2]], p_ring[perm[3]]
+                total_volume += (_vol_tet(nA, nB, q3, q2) + _vol_tet(nA, q2, q3, q1) + _vol_tet(nA, q1, q2, q0))
+    return total_volume
 
 
-@njit(fastmath=True, cache=save_cache)
-def make_continuous_contour(segments_array):
-    """Finds all disconnected curves and returns them as a list of (segments, points)."""
-    # Defensive check removed per request; empty arrays handle naturally
-    adjacency, degree, points_list = build_graph(segments_array)
-    n_points = len(points_list)
-    edge_used = degree.copy()
-    all_curves = []
+@njit(parallel=True, cache=True)
+def integrate_surface_kernel(nodes, phi_target, phi_filter):
+    n_tets = nodes.shape[0]
+    total_area = 0.0
+    for i in prange(n_tets):
+        mask = 0
+        if phi_target[i, 0] > 0: mask |= 1
+        if phi_target[i, 1] > 0: mask |= 2
+        if phi_target[i, 2] > 0: mask |= 4
+        if phi_target[i, 3] > 0: mask |= 8
 
-    while np.sum(edge_used) > 0:
-        start_node = -1
-        for i in range(n_points):
-            if edge_used[i] > 0 and degree[i] % 2 != 0:
-                start_node = i
-                break
-        if start_node == -1:
-            for i in range(n_points):
-                if edge_used[i] > 0:
-                    start_node = i
-                    break
-        if start_node == -1: break
+        if mask == 0 or mask == 15: continue
+        pts, ts = _get_intersections(nodes[i], phi_target[i])
 
-        path = traverse_graph_path(adjacency, edge_used, start_node)
-        path_ptr = len(path)
-
-        ordered_segments = np.empty((path_ptr - 1, 4), dtype=np.float64)
-        ordered_points = np.empty((path_ptr, 2), dtype=np.float64)
-
-        for i in range(path_ptr):
-            pt = points_list[path[i]]
-            ordered_points[i, 0], ordered_points[i, 1] = pt[0], pt[1]
-            if i < path_ptr - 1:
-                pt_next = points_list[path[i + 1]]
-                ordered_segments[i, 0], ordered_segments[i, 1] = pt[0], pt[1]
-                ordered_segments[i, 2], ordered_segments[i, 3] = pt_next[0], pt_next[1]
-
-        all_curves.append((ordered_segments, ordered_points))
-    return all_curves
-
-
-@njit(fastmath=True, cache=save_cache)
-def contour_bounded_area(contour_points):
-    """Calculate area bounded by contour using shoelace formula (closed via origin)."""
-    n = len(contour_points)
-    if n < 2: return 0.0
-    area = 0.0
-    area += 0.0 * contour_points[0, 1] - contour_points[0, 0] * 0.0
-    for i in range(n - 1):
-        area += contour_points[i, 0] * contour_points[i + 1, 1] - contour_points[i + 1, 0] * contour_points[i, 1]
-    area += contour_points[n - 1, 0] * 0.0 - 0.0 * contour_points[n - 1, 1]
-    return abs(area) / 2.0
+        if mask in [1, 2, 4, 8, 7, 11, 13, 14]:
+            node_idx = {1: 0, 14: 0, 2: 1, 13: 1, 4: 2, 11: 2, 8: 3, 7: 3}[mask]
+            edges = NODE_TO_EDGES[node_idx]
+            valid_cnt = 0
+            for k in range(3):
+                e_idx = edges[k]
+                m, n = EDGES[e_idx]
+                if (phi_filter[i, m] + ts[e_idx] * (phi_filter[i, n] - phi_filter[i, m])) > 0:
+                    valid_cnt += 1
+            if valid_cnt == 3:
+                total_area += _area_tri_proj(pts[edges[0]], pts[edges[1]], pts[edges[2]])
+        else:
+            edge_idxs = LUT_PRISM_EDGES[mask]
+            if edge_idxs[0] != -1:
+                valid_cnt = 0
+                p_quad = np.empty((4, 3), dtype=np.float64)
+                for k in range(4):
+                    e_idx = edge_idxs[k]
+                    m, n = EDGES[e_idx]
+                    if (phi_filter[i, m] + ts[e_idx] * (phi_filter[i, n] - phi_filter[i, m])) > 0:
+                        valid_cnt += 1
+                if valid_cnt == 4:
+                    p_quad = np.empty((4, 3), dtype=np.float64)
+                    for k in range(4): p_quad[k] = pts[edge_idxs[k]]
+                    total_area += (_area_tri_proj(p_quad[0], p_quad[1], p_quad[2]) +
+                                   _area_tri_proj(p_quad[0], p_quad[2], p_quad[3]))
+    return total_area
 
 
-@njit(fastmath=True, cache=save_cache)
-def filter_curves(curves_list):
-    """Selects the curve with the largest bounded area."""
-    valid_curves = []
-    if len(curves_list) == 0:
-        return valid_curves
+class SimplexIntegrator:
+    def __init__(self, n_periodics=1, r_min=0.0):
+        self.n_periodics = n_periodics
+        self.r_min = r_min
 
-    max_area = -1.0
-    best_idx = 0
+    def compute_slice_metrics(self, nodes, phi_grain, phi_casing, phi_eff_buffer):
+        # 1. FIXED dz CALCULATION
+        # Use Vertex 3 (top) - Vertex 0 (bottom) of the first tetrahedron to get true layer thickness
+        dz = nodes[0, 3, 2] - nodes[0, 0, 2]
+        if dz == 0: dz = 1.0
 
-    for i in range(len(curves_list)):
-        _, pts = curves_list[i]
-        area = contour_bounded_area(pts)
-        if area > max_area:
-            max_area = area
-            best_idx = i
+        casing_area = integrate_volume_kernel(nodes, phi_casing) / dz
 
-    valid_curves.append(curves_list[best_idx])
-    return valid_curves
+        # Intersection (Grain Material)
+        np.minimum(phi_grain, phi_casing, out=phi_eff_buffer)
 
+        # 'grain_area_local' contains the Volume of the Propellant
+        grain_area_local = integrate_volume_kernel(nodes, phi_eff_buffer) / dz
 
-@njit(fastmath=True, cache=save_cache)
-def clip_contour(contour_segments, casing_segments):
-    """Clips contour segments that share endpoints with casing segments."""
-    n_casing = len(casing_segments)
-    casing_points = {}
-    for i in range(n_casing):
-        casing_points[(casing_segments[i, 0], casing_segments[i, 1])] = True
-        casing_points[(casing_segments[i, 2], casing_segments[i, 3])] = True
+        perimeter = integrate_surface_kernel(nodes, phi_grain, phi_casing) / dz
+        casing_exposed = integrate_surface_kernel(nodes, phi_casing, phi_grain) / dz
 
-    n_contour = len(contour_segments)
-    keep_mask = np.ones(n_contour, dtype=np.bool_)
-    for i in range(n_contour):
-        if (contour_segments[i, 0], contour_segments[i, 1]) in casing_points or \
-                (contour_segments[i, 2], contour_segments[i, 3]) in casing_points:
-            keep_mask[i] = False
+        core_area = np.pi * (self.r_min ** 2)
+        if casing_area < 1E-9: core_area = 0.0
 
-    n_kept = np.sum(keep_mask)
-    clip_segments = np.empty((n_kept, 4), dtype=np.float64)
-    points_dict = {}
-    idx = 0
-    for i in range(n_contour):
-        if keep_mask[i]:
-            clip_segments[idx] = contour_segments[i]
-            points_dict[(contour_segments[i, 0], contour_segments[i, 1])] = True
-            points_dict[(contour_segments[i, 2], contour_segments[i, 3])] = True
-            idx += 1
+        flow_port_area = casing_area - grain_area_local  # The actual empty space
 
-    clip_points = np.empty((len(points_dict), 2), dtype=np.float64)
-    for i, pt in enumerate(points_dict.keys()):
-        clip_points[i, 0], clip_points[i, 1] = pt[0], pt[1]
+        perimeter_ = perimeter * self.n_periodics
+        hydraulic_perimeter_ = (perimeter + casing_exposed) * self.n_periodics
+        propellant_area_ = flow_port_area * self.n_periodics
+        casing_area_ = casing_area * self.n_periodics + core_area
+        flow_area_ = grain_area_local * self.n_periodics + core_area
 
-    return clip_segments, clip_points
+        return {
+            "perimeter": perimeter_,
+            "hydraulic_perimeter": hydraulic_perimeter_,
+            "propellant_area": propellant_area_,  # Actually Port Area
+            "casing_area": casing_area_,
+            "flow_area": flow_area_  # Actually Propellant Area
+        }
 
 
-@njit(fastmath=True, cache=save_cache)
-def contour_length(contour_segments):
-    """Calculate total Euclidean length of all segments in the contour."""
-    total_length = 0.0
-    for i in range(len(contour_segments)):
-        dx = contour_segments[i, 2] - contour_segments[i, 0]
-        dy = contour_segments[i, 3] - contour_segments[i, 1]
-        total_length += np.sqrt(dx * dx + dy * dy)
-    return total_length
+# ==============================================================================
+# PART 3: OPTIMIZED GATHER & MAIN LOOP
+# ==============================================================================
+
+@njit(parallel=True, cache=True)
+def fill_slice_buffers(k, nx, ny, tet_offsets, Xg, Yg, Zg, phi_p, phi_c,
+                       out_coords, out_phi_p, out_phi_c):
+    for i in prange(nx):
+        for j in range(ny):
+            base_idx = (i * ny + j) * 6
+            for t in range(6):
+                buf_idx = base_idx + t
+                for v in range(4):
+                    ii = i + tet_offsets[t, v, 0]
+                    jj = j + tet_offsets[t, v, 1]
+                    kk = k + tet_offsets[t, v, 2]
+
+                    out_coords[buf_idx, v, 0] = Xg[ii, jj, kk]
+                    out_coords[buf_idx, v, 1] = Yg[ii, jj, kk]
+                    out_coords[buf_idx, v, 2] = Zg[ii, jj, kk]
+
+                    out_phi_p[buf_idx, v] = phi_p[ii, jj, kk]
+                    out_phi_c[buf_idx, v] = phi_c[ii, jj, kk]
 
 
-@njit(fastmath=True, cache=save_cache)
-def segments_list_to_array(segment_list):
-    """Helper to convert Numba list of segments to fixed-size array."""
-    n = len(segment_list)
-    arr = np.empty((n, 4), dtype=np.float64)
-    for i in range(n):
-        arr[i] = segment_list[i]
-    return arr
+def compute_geometric_distributions(grid, state):
+
+    phi_prop = np.ascontiguousarray(-state.phi)
+    phi_case = np.ascontiguousarray(-state.casing)
+
+    Xg = np.ascontiguousarray(grid.cart_coords[0])
+    Yg = np.ascontiguousarray(grid.cart_coords[1])
+    Zg = np.ascontiguousarray(grid.cart_coords[2])
+
+    simplex = SimplexGrid(grid)
+    integrator = SimplexIntegrator(n_periodics=grid.n_periodics, r_min=grid.polar_coords[0, :].min())
+
+    nx, ny, nz = simplex.nx_dual, simplex.ny_dual, simplex.nz_dual
+
+    perimeters = np.zeros(nz)
+    hydraulic_perimeters = np.zeros(nz)
+    flow_areas = np.zeros(nz)
+    casing_areas = np.zeros(nz)
+    propellant_areas = np.zeros(nz)
+    z_coords = np.zeros(nz)
+
+    n_tets_slice = nx * ny * 6
+    slab_coords = np.zeros((n_tets_slice, 4, 3), dtype=np.float64)
+    slab_phi_p = np.zeros((n_tets_slice, 4), dtype=np.float64)
+    slab_phi_c = np.zeros((n_tets_slice, 4), dtype=np.float64)
+    slab_phi_eff_buf = np.zeros((n_tets_slice, 4), dtype=np.float64)
 
 
-@njit(fastmath=True, cache=save_cache)
-def process_slice_geometry(phi_slice, phicas_slice, x_slice, y_slice):
-    """Processes a 2D slice to calculate the primary contour area and perimeter."""
-    contour_list = marching_cubes(phi_slice, x_slice, y_slice)
-    if len(contour_list) == 0: return 0.0, 0.0, 0.0
-
-    raw_segments = segments_list_to_array(contour_list)
-    all_curves = make_continuous_contour(raw_segments)
-    valid_curves = filter_curves(all_curves)
-
-    if len(valid_curves) == 0: return 0.0, 0.0, 0.0
-
-    ordered_segments, ordered_points = valid_curves[0]
-    area = contour_bounded_area(ordered_points)
-
-    wetted_perimeter = contour_length(ordered_segments)
-
-    perimeter = 0.0
-    casing_list = marching_cubes(phicas_slice, x_slice, y_slice)
-    if len(casing_list) > 0:
-        cas_raw = segments_list_to_array(casing_list)
-        cas_curves = make_continuous_contour(cas_raw)
-        # Select casing curve with max area as well
-        valid_cas = filter_curves(cas_curves)
-        if len(valid_cas) > 0:
-            casing_segs, _ = valid_cas[0]
-            clip_segs, _ = clip_contour(ordered_segments, casing_segs)
-            perimeter = contour_length(clip_segs) if len(clip_segs) > 0 else 0.0
-    else:
-        perimeter = contour_length(ordered_segments)
-
-    return area, perimeter, wetted_perimeter
-
-
-@njit(parallel=True, cache=save_cache)
-def calculate_axial_distributions(phi, phi_cas, cart_coords):
-    """Calculate axial distributions of area and perimeter for all z-slices."""
-    phi_combined = np.maximum(phi, phi_cas)
-    _, _, n_z = phi_combined.shape
-    x_coords, y_coords, z_coords = cart_coords
-
-    z_distances = np.zeros(n_z, dtype=np.float64)
-    areas = np.zeros(n_z, dtype=np.float64)
-    burning_perimeters = np.zeros(n_z, dtype=np.float64)
-    wetted_perimeters = np.zeros(n_z, dtype=np.float64)
-
-    for k in prange(n_z):
-        z_distances[k] = z_coords[0, 0, k]
-        areas[k], burning_perimeters[k], wetted_perimeters[k] = process_slice_geometry(
-            phi_combined[..., k], phi_cas[..., k],
-            x_coords[..., k], y_coords[..., k]
+    for k in range(nz):
+        fill_slice_buffers(
+            k, nx, ny, simplex.tet_offsets,
+            Xg, Yg, Zg, phi_prop, phi_case,
+            slab_coords, slab_phi_p, slab_phi_c
         )
 
-    return z_distances, areas, burning_perimeters, wetted_perimeters
+        metrics = integrator.compute_slice_metrics(slab_coords, slab_phi_p, slab_phi_c, slab_phi_eff_buf)
+
+        perimeters[k] = metrics["perimeter"]
+        hydraulic_perimeters[k] = metrics["hydraulic_perimeter"]
+        flow_areas[k] = metrics["flow_area"]
+        casing_areas[k] = metrics["casing_area"]
+        propellant_areas[k] = metrics["propellant_area"]
+
+        z_coords[k] = slab_coords[0, 0, 2]
+
+    return z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas

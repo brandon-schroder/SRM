@@ -45,8 +45,7 @@ class LSSolver:
         self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'))
         self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'))
 
-        self._get_geometry("propellant")
-        self._get_geometry("casing")
+        self._get_geometry()
 
         self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
         self.state.br = self.state.br + self.cfg.br_initial
@@ -65,24 +64,16 @@ class LSSolver:
 
         return -self.state.br[self.grid.interior] * self.state.grad_mag
 
-    def _get_geometry(self, sdf="propellant"):
+    def _get_geometry(self):
 
-        phi = self.state.phi
-        phi_cas = self.state.casing
-        cart_coords = self.grid.cart_coords
+        z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = compute_geometric_distributions(self.grid, self.state)
 
-        if sdf == "propellant":
-            z_distances, areas, perimeters, wetted_perimeters = calculate_axial_distributions(phi, phi_cas, cart_coords)
+        self.state.x = z_coords
+        self.state.A_propellant = flow_areas
+        self.state.P_propellant = perimeters
+        self.state.P_wetted = hydraulic_perimeters
+        self.state.A_casing = casing_areas
 
-            self.state.x = z_distances
-            self.state.A_propellant = areas*self.cfg.n_periodics
-            self.state.P_propellant = perimeters*self.cfg.n_periodics
-            self.state.P_wetted = wetted_perimeters * self.cfg.n_periodics
-        elif sdf == "casing":
-            z_distances, areas, _, _ = calculate_axial_distributions(phi_cas, phi_cas, cart_coords)
-
-            self.state.x = z_distances
-            self.state.A_casing = areas*self.cfg.n_periodics
 
     def set_burn_rate(self, x: np.ndarray, br: np.ndarray):
 
@@ -111,7 +102,7 @@ class LSSolver:
         phi_new = rk_step(phi_int, dt, self._compute_rhs)
         self.state.phi[self.grid.interior] = phi_new
 
-        self._get_geometry(sdf="propellant")
+        self._get_geometry()
 
         self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
 
