@@ -21,24 +21,24 @@ NODE_TO_EDGES = np.array([[0, 1, 2], [0, 3, 4], [1, 3, 5], [2, 4, 5]], dtype=np.
 
 # Prism Decomposition Tables
 LUT_PRISM_EDGES = np.full((16, 4), -1, dtype=np.int8)
-LUT_PRISM_EDGES[3] = [1, 2, 4, 3];
-LUT_PRISM_EDGES[5] = [0, 2, 5, 3]
-LUT_PRISM_EDGES[6] = [0, 1, 5, 4];
-LUT_PRISM_EDGES[9] = [0, 4, 5, 1]
-LUT_PRISM_EDGES[10] = [0, 3, 5, 2];
+LUT_PRISM_EDGES[3]  = [1, 2, 4, 3]
+LUT_PRISM_EDGES[5]  = [0, 2, 5, 3]
+LUT_PRISM_EDGES[6]  = [0, 1, 5, 4]
+LUT_PRISM_EDGES[9]  = [0, 4, 5, 1]
+LUT_PRISM_EDGES[10] = [0, 3, 5, 2]
 LUT_PRISM_EDGES[12] = [1, 3, 4, 2]
 
 LUT_PRISM_NODES = np.full((16, 2), -1, dtype=np.int8)
-LUT_PRISM_NODES[3] = [0, 1];
-LUT_PRISM_NODES[5] = [0, 2];
-LUT_PRISM_NODES[6] = [1, 2]
-LUT_PRISM_NODES[9] = [0, 3];
-LUT_PRISM_NODES[10] = [1, 3];
+LUT_PRISM_NODES[3]  = [0, 1]
+LUT_PRISM_NODES[5]  = [0, 2]
+LUT_PRISM_NODES[6]  = [1, 2]
+LUT_PRISM_NODES[9]  = [0, 3]
+LUT_PRISM_NODES[10] = [1, 3]
 LUT_PRISM_NODES[12] = [2, 3]
 
 LUT_PRISM_ORDER = np.zeros((16, 4), dtype=np.int8)
 for i in range(16): LUT_PRISM_ORDER[i] = [0, 1, 2, 3]
-LUT_PRISM_ORDER[6] = [3, 0, 1, 2];
+LUT_PRISM_ORDER[6] = [3, 0, 1, 2]
 LUT_PRISM_ORDER[9] = [3, 0, 1, 2]
 
 
@@ -315,9 +315,7 @@ def compute_geometric_distributions(grid, state):
         perimeters[k] = perimeter * n_periodics
         hydraulic_perimeters[k] = (perimeter + casing_exposed) * n_periodics
         casing_areas[k] = casing_area * n_periodics + core_area
-
-        # LEGACY KEY MAPPING
-        flow_areas[k] = grain_area * n_periodics + core_area  # "flow_area" = Propellant
-        propellant_areas[k] = flow_port_area * n_periodics  # "propellant_area" = Port
+        flow_areas[k] = grain_area * n_periodics + core_area
+        propellant_areas[k] = flow_port_area * n_periodics
 
     return z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas

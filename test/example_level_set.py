@@ -16,7 +16,7 @@ def main():
 
     # Domain bounds: [r_min, r_max, theta_min, theta_max, z_min, z_max]
     bounds = [10.0 * 1e-3, 35.0 * 1e-3, None, None, 0.0 * 1e-3, 100.0 * 1e-3]
-    br_initial = 0.00001e-3
+    br_initial = 10e-3
 
     x_ib = np.linspace(bounds[4], bounds[5], 100)
     br_ib = np.ones_like(x_ib) * br_initial
@@ -30,7 +30,7 @@ def main():
         file_case=case_file,
         ng=3,
         CFL=0.8,
-        t_end=0.001,
+        t_end=0.1,
         br_initial=br_initial,
         # Added recorder-specific configuration attributes
         output_filename="level_set_results.h5",
@@ -55,6 +55,10 @@ def main():
     # Save initial state (t=0)
     recorder.save()
 
+    import time
+
+    t_start = time.time()
+
     while solver.state.t < config.t_end:
         # Perform one step
         dt, current_time = solver.step()
@@ -69,6 +73,10 @@ def main():
         # Monitor progress
         avg_phi = np.mean(solver.state.phi)
         print(f"t={current_time:.5f}s | dt={dt:.2e} | Avg Phi={avg_phi:.2e}")
+
+    t_end = time.time()
+
+    print(f"Simulation took {t_end - t_start:.2f} seconds.")
 
     # ---------------------------------------------------------
     # 4. Finalization & Post-Processing
