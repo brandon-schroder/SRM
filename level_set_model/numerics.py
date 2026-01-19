@@ -21,9 +21,9 @@ def weno_godunov(phi, dx, r_coords, ng=3):
     dt_half = dx[1] * 0.5
     dz_half = dx[2] * 0.5
 
-    D_r = np.empty((nr, ntheta, nz))
-    D_theta = np.empty((nr, ntheta, nz))
-    D_z = np.empty((nr, ntheta, nz))
+    D_r = np.asfortranarray(np.empty((nr, ntheta, nz)))
+    D_theta = np.asfortranarray(np.empty((nr, ntheta, nz)))
+    D_z = np.asfortranarray(np.empty((nr, ntheta, nz)))
 
 
     for k in prange(nz):         # Outer
