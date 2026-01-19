@@ -8,7 +8,7 @@ from .numerics import *
 from .geometry import *
 from .boundary import *
 
-from core.time_integrators import ssp_rk_3_3 as rk_step
+from core.time_integrators import ssp_rk_3_3_low_storage as rk_step
 
 
 class LSSolver:
