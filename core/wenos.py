@@ -1,7 +1,7 @@
 from numba import njit
 
 # Global constant (shared across all WENO calls)
-EPS_WENO = 1E-12
+EPS_WENO = 1E-6
 
 # ===================================================================
 # WENO3: 3rd-order

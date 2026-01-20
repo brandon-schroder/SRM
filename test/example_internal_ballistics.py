@@ -9,10 +9,14 @@ from internal_ballistics_model.recorder import IBRecorder
 
 
 def main():
+
+    precision=np.float32
+
     df = pd.read_csv('nozzle_area_dist.csv')
-    x_geom = df['x'] * 1e-3
-    A_geom = df['a'] * 1e-6
-    P_geom = np.ones_like(x_geom) * 1E-0
+    # Force the arrays to match your simulation precision
+    x_geom = (df['x'] * 1e-3).values.astype(precision)
+    A_geom = (df['a'] * 1e-6).values.astype(precision)
+    P_geom = (np.ones_like(x_geom) * 1.0).astype(precision)
 
     for i in range(len(x_geom)): # No propellant in the nozzle
         if x_geom[i] > 0.1:
@@ -41,6 +45,8 @@ def main():
     # The new IBRecorder looks for this attribute.
     config.output_filename = "output_ib.h5"
 
+    config.dtype = precision
+
     print(f"--- Initializing Simulation: {config.n_cells} cells ---")
 
     # ---------------------------------------------------------
@@ -49,6 +55,8 @@ def main():
     solver = IBSolver(config)
     solver.set_geometry(x_geom, A_geom, P_geom, P_wetted)
     solver.initialize()
+
+    print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")
 
     # ---------------------------------------------------------
     # 3. Recorder Setup

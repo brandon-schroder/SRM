@@ -21,7 +21,7 @@ class Grid1D:
         end = config.bounds[1] - 0.5 * self.dx + self.ng * self.dx
 
         self.dims = (config.n_cells + 2 * self.ng,)
-        self.x_coords = np.linspace(start, end, self.dims[0])
+        self.x_coords = np.linspace(start, end, self.dims[0], dtype=config.dtype)
 
         # 3. Define the "Interior" slice for easy access
         # This allows solver.u[grid.interior] to skip ghost cells

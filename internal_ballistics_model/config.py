@@ -40,6 +40,8 @@ class SimulationConfig:
     erosive_m: float = -0.125
     erosive_gth: float = 35.0
 
+    dtype: np.dtype = np.float64
+
 
 @dataclass
 class FlowState:
@@ -48,6 +50,8 @@ class FlowState:
     """
     n_cells: int
     t: float = 0.0
+
+    dtype: np.dtype = np.float64
 
     # Arrays
     U: np.ndarray = field(init=False)
@@ -65,16 +69,16 @@ class FlowState:
 
     def __post_init__(self):
         shape = (self.n_cells,)
-        self.U = np.zeros((3, self.n_cells))
-        self.rho = np.zeros(shape)
-        self.u = np.zeros(shape)
-        self.p = np.zeros(shape)
-        self.c = np.zeros(shape)
+        self.U = np.zeros((3, self.n_cells), dtype=self.dtype)
+        self.rho = np.zeros(shape, dtype=self.dtype)
+        self.u = np.zeros(shape, dtype=self.dtype)
+        self.p = np.zeros(shape, dtype=self.dtype)
+        self.c = np.zeros(shape, dtype=self.dtype)
 
-        self.A = np.zeros(shape)
-        self.dAdz = np.zeros(shape)
-        self.P = np.zeros(shape)
-        self.P_wetted = np.zeros(shape)
+        self.A = np.zeros(shape, dtype=self.dtype)
+        self.dAdz = np.zeros(shape, dtype=self.dtype)
+        self.P = np.zeros(shape, dtype=self.dtype)
+        self.P_wetted = np.zeros(shape, dtype=self.dtype)
 
-        self.br = np.zeros(shape)
-        self.eta = np.zeros(shape)
+        self.br = np.zeros(shape, dtype=self.dtype)
+        self.eta = np.zeros(shape, dtype=self.dtype)

@@ -37,12 +37,16 @@ def main():
         vtk_dir="vtk_output"
     )
 
+    config.dtype = np.float32
+
     print(f"--- Initializing Level Set Simulation: {config.size} cells ---")
 
     # ---------------------------------------------------------
     # 2. Solver & Recorder Setup
     # ---------------------------------------------------------
     solver = LSSolver(config)
+
+    print(f"Grid Memory: {solver.state.phi.nbytes / 1e6:.2f} MB")
 
     # Initialize the recorder with the solver instance
     recorder = LSRecorder(solver)

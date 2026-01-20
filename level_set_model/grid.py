@@ -24,9 +24,9 @@ class Grid3D:
         dims_full = [n_r + 2 * self.ng, n_theta + 1, n_z + 2 * self.ng]
 
         # Full grid with ghost cells
-        r_full = np.linspace(r_min + 0.5 * dr - self.ng * dr, r_max - 0.5 * dr + self.ng * dr, n_r + 2 * self.ng)
-        z_full = np.linspace(z_min + 0.5 * dz - self.ng * dz, z_max - 0.5 * dz + self.ng * dz, n_z + 2 * self.ng)
-        theta = np.linspace(theta_min + 0.5 * dtheta, theta_max + 0.5 * dtheta, n_theta + 1)
+        r_full = np.linspace(r_min + 0.5 * dr - self.ng * dr, r_max - 0.5 * dr + self.ng * dr, n_r + 2 * self.ng, dtype=config.dtype)
+        z_full = np.linspace(z_min + 0.5 * dz - self.ng * dz, z_max - 0.5 * dz + self.ng * dz, n_z + 2 * self.ng, dtype=config.dtype)
+        theta = np.linspace(theta_min + 0.5 * dtheta, theta_max + 0.5 * dtheta, n_theta + 1, dtype=config.dtype)
 
         # Meshgrid
         R_full, THETA_full, Z_full = np.meshgrid(r_full, theta, z_full, indexing='ij')
@@ -39,8 +39,8 @@ class Grid3D:
         self.pv_grid=grid_full
         self.dx=[dr, dtheta, dz]
         self.dims=dims_full
-        self.cart_coords=np.array([X_full, Y_full, Z_full])
-        self.polar_coords=np.array([R_full, THETA_full, Z_full])
+        self.cart_coords=np.array([X_full, Y_full, Z_full], dtype=config.dtype)
+        self.polar_coords=np.array([R_full, THETA_full, Z_full], dtype=config.dtype)
         self.interior = np.s_[self.ng:-self.ng, :-1, self.ng:-self.ng]
 
 

@@ -19,7 +19,7 @@ class LSSolver:
         self.grid = Grid3D(config)
 
         # 2. Allocate State
-        self.state = State(dims=self.grid.dims)
+        self.state = State(dims=self.grid.dims, dtype=self.cfg.dtype)
 
         # 3. Initialize Solver
         self.initialize()
@@ -42,8 +42,8 @@ class LSSolver:
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(prop)
         self.grid.pv_grid.point_data["propellant"] = self.grid.pv_grid.point_data["implicit_distance"]
 
-        self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'))
-        self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'))
+        self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
+        self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
 
         self._get_geometry()
 

@@ -27,6 +27,8 @@ class SimulationConfig:
     output_filename: str = "output.h5"
     vtk_dir: str = "vtk_output"
 
+    dtype: np.dtype = np.float64
+
 
 @dataclass
 class State:
@@ -35,6 +37,8 @@ class State:
     """
     dims: tuple[int, int, int]
     t: float = 0.0
+
+    dtype: np.dtype = np.float64
 
     # Arrays
     phi: np.ndarray = field(init=False)
@@ -49,12 +53,12 @@ class State:
 
     def __post_init__(self):
 
-        self.phi = np.zeros(self.dims)
-        self.casing = np.zeros(self.dims)
-        self.grad_mag = np.zeros(self.dims)
-        self.A_propellant = np.zeros(self.dims[2])
-        self.A_casing = np.zeros(self.dims[2])
-        self.P_propellant = np.zeros(self.dims[2])
-        self.P_wetted = np.zeros(self.dims[2])
-        self.x = np.zeros(self.dims[2])
-        self.br = np.zeros(self.dims)
+        self.phi = np.zeros(self.dims, dtype=self.dtype)
+        self.casing = np.zeros(self.dims, dtype=self.dtype)
+        self.grad_mag = np.zeros(self.dims, dtype=self.dtype)
+        self.br = np.zeros(self.dims, dtype=self.dtype)
+        self.A_propellant = np.zeros(self.dims[2], dtype=self.dtype)
+        self.A_casing = np.zeros(self.dims[2], dtype=self.dtype)
+        self.P_propellant = np.zeros(self.dims[2], dtype=self.dtype)
+        self.P_wetted = np.zeros(self.dims[2], dtype=self.dtype)
+        self.x = np.zeros(self.dims[2], dtype=self.dtype)

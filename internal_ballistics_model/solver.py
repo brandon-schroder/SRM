@@ -17,7 +17,7 @@ class IBSolver:
         self.grid = Grid1D(config)
 
         # 2. Allocate State
-        self.state = FlowState(n_cells=self.grid.dims[0])
+        self.state = FlowState(n_cells=self.grid.dims[0], dtype=self.cfg.dtype)
 
 
     def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray):
@@ -25,10 +25,13 @@ class IBSolver:
         Interpolates external geometry onto the grid.
         CRITICAL: Clamps Area to prevent division by zero in boundary conditions.
         """
+
+        target_dtype = self.cfg.dtype
+
         # Interpolate onto the solver's x coordinates (including ghosts)
-        self.state.A = np.interp(self.grid.x_coords, x, A)
-        self.state.P = np.interp(self.grid.x_coords, x, P)
-        self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted)
+        self.state.A = np.interp(self.grid.x_coords, x, A).astype(target_dtype)
+        self.state.P = np.interp(self.grid.x_coords, x, P).astype(target_dtype)
+        self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted).astype(target_dtype)
 
         # Calculate gradients (Central Difference)
         self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * self.grid.dx)

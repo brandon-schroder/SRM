@@ -41,15 +41,17 @@ def compute_primitives_jit(U, A, gamma):
     JIT-compiled, array-wise primitive variable extraction.
     This computes primitives for the *entire* domain (including ghosts).
     """
-    eps = 1e-12  # for stability
+    precision = U.dtype.type
+    eps = precision(1e-12)  # for stability
+
     rho = U[0] / (A + eps)
     u = U[1] / (U[0] + eps)
     rho_eT = U[2] / A  # Total energy per volume
     p = (gamma - 1.0) * (rho_eT - 0.5 * rho * u ** 2)
 
     # Floor for stability
-    rho = np.maximum(rho, 1e-10)
-    p = np.maximum(p, 1e-10)
+    rho = np.maximum(rho, eps)
+    p = np.maximum(p, eps)
 
     c = np.sqrt(gamma * p / rho)
 
@@ -58,9 +60,7 @@ def compute_primitives_jit(U, A, gamma):
 @njit(fastmath=True, cache=True)
 def primitive_to_conserved(rho, u, p, A, gamma):
     E = p / (gamma - 1.0) + 0.5 * rho * u**2
-    return np.stack((A * rho,
-                     A * rho * u,
-                     A * E))
+    return np.stack((A * rho, A * rho * u, A * E))
 
 # ==============================================================
 
@@ -87,7 +87,7 @@ def source_jit(rho_p, Tf, br, R, gamma, p, P_propellant, dAdx):
     Uses pre-computed interior pressure.
     """
 
-    S = np.zeros((3, p.shape[0]))
+    S = np.zeros((3, p.shape[0]), dtype=p.dtype)
 
     uf = (rho_p * br * R * Tf) / p
     hf = gamma / (gamma - 1) * R * Tf
@@ -112,7 +112,7 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
     fp = 0.5 * (F + alpha * U)
     fm = 0.5 * (F - alpha * U)
 
-    F_hat = np.zeros((num_comp, nc+1))
+    F_hat = np.zeros((num_comp, nc+1), dtype=U.dtype)
 
     for m in range(num_comp):
         for i in range(nc + 1): # Inner: Spatial (Contiguous)
@@ -131,19 +131,22 @@ def compute_numerical_flux_jit(U, A, rho, u, p, alpha, ng):
 @njit(fastmath=True, cache=True)
 def adaptive_timestep(CFL, U, A, gamma, dx, ng, t, t_end):
 
+    precision = U.dtype.type
+    eps = precision(1e-12)
+
     rho, u, p, c = compute_primitives_jit(U, A, gamma)
 
-    c = np.sqrt(np.maximum(gamma * p / rho, 1e-10))
+    c = np.sqrt(np.maximum(gamma * p / rho, eps))
 
     smax = np.max(np.abs(u[ng:-ng]) + c[ng:-ng])
 
-    dt_stable = CFL * dx / (smax + 1e-16)
+    dt_stable = CFL * dx / (smax + eps)
 
     # Do not overshoot the final time
     t_remaining = t_end - t
 
     # If the time remaining is too small, or overshoots, return dt=0
-    if t_remaining <= 1e-10 or t_remaining < 0:
+    if t_remaining <= eps or t_remaining < 0:
         return 0.0
 
     # Prevents small timesteps near t_end

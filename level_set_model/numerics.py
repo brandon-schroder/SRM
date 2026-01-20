@@ -21,9 +21,9 @@ def weno_godunov(phi, dx, r_coords, ng=3):
     dt_half = dx[1] * 0.5
     dz_half = dx[2] * 0.5
 
-    D_r = np.asfortranarray(np.empty((nr, ntheta, nz)))
-    D_theta = np.asfortranarray(np.empty((nr, ntheta, nz)))
-    D_z = np.asfortranarray(np.empty((nr, ntheta, nz)))
+    D_r = np.asfortranarray(np.empty((nr, ntheta, nz), dtype=phi.dtype))
+    D_theta = np.asfortranarray(np.empty((nr, ntheta, nz), dtype=phi.dtype))
+    D_z = np.asfortranarray(np.empty((nr, ntheta, nz), dtype=phi.dtype))
 
 
     for k in prange(nz):         # Outer
@@ -100,6 +100,8 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
     the same for the entire shell.
 
     """
+    precision = grad_mag.dtype.type
+    eps = precision(1e-12)
 
     nr, ntheta, nz = grad_mag.shape
     dr, dtheta, dz = dx
@@ -108,7 +110,7 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
     r_physical = r_coords[ng:-ng, 0, ng]        # assuming r independent of θ,z
 
     # Pre-compute maximum |∇φ| in each radial layer (nr values)
-    max_grad_per_r = np.zeros(nr)
+    max_grad_per_r = np.zeros(nr, dtype=grad_mag.dtype)
     for i in range(nr):
         max_val = 0.0
         for j in range(ntheta):
@@ -123,14 +125,14 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
         r_i = r_physical[i]
         max_grad_i = max_grad_per_r[i]
 
-        if max_grad_i < 1e-12:
+        if max_grad_i < eps:
             continue                                    # nothing moving here
 
         wave_speed = br.max()                                 # local max propagation speed
 
         # Effective grid spacing in θ-direction at this radius
         h_theta = r_i * dtheta
-        if h_theta < 1e-12:                             # protect axis (if present)
+        if h_theta < eps:                             # protect axis (if present)
             h_theta = dr * 0.5                          # treat as Cartesian near r=0
 
         # Directional CFL limits
@@ -147,13 +149,13 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
     dt_stable = CFL * dt_min
 
     # Global safety caps
-    dt_stable = min(max(dt_stable, 1e-8), 0.1)
+    dt_stable = min(max(dt_stable, eps), 0.1)
 
     # Do not overshoot the final time
     t_remaining = t_end - t
 
     # If the time remaining is too small, or overshoots, return dt=0
-    if t_remaining <= 1e-10 or t_remaining < 0:
+    if t_remaining <= eps or t_remaining < 0:
         return 0.0
 
     # Prevents small timesteps near t_end
