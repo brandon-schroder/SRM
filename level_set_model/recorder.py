@@ -14,12 +14,12 @@ class LSRecorder(HDF5Logger):
         self.cfg = solver.cfg
 
         # 1. Define Variables to Track in HDF5
-        scalar_names = ["time", "dt", "vol_propellant"]
-        field_names = ["x", "A_propellant", "A_casing", "P_propellant", "P_wetted"]
+        scalar_names = ["time", "dt"]
+        field_names =  ["x", "A_propellant", "A_casing", "P_propellant", "P_wetted"]
 
         # 2. Determine Field Shape
         nz = solver.grid.dims[2]
-        field_shape = (nz,)
+        field_shape = (nz - 1,) # geometry.py works on intermediate grid points
 
         # 3. Initialize Base Logger (HDF5)
         filename = getattr(self.cfg, "output_filename", "level_set.h5")
