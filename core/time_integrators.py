@@ -59,8 +59,8 @@ def ssp_rk_3_3_low_storage(u: np.ndarray, dt: float, L) -> np.ndarray:
     return u
 
 
-def ssp_rk_4_4(u: np.ndarray, dt: float, L) -> np.ndarray:
-    """4th-order, 4-stage SSP Runge-Kutta."""
+def classic_rk4(u: np.ndarray, dt: float, L) -> np.ndarray:
+    """4th-order, 4-stage Classical Runge-Kutta."""
     # Stage 1
     Lu = L(u)
     u1 = u + (1.0 / 2.0) * dt * Lu
@@ -81,22 +81,20 @@ def ssp_rk_4_4(u: np.ndarray, dt: float, L) -> np.ndarray:
 
 
 def ssp_rk_5_3(un, dt, F):
-    """
-    SSP-RK(5,3) with exact fractions
-    """
-    # Stage 1
-    u1 = un + (2 / 5) * dt * F(un)
 
-    # Stage 2
-    u2 = (1.0 / 2.0) * un + (1.0 / 2.0) * u1 + (1.0 / 5.0) * dt * F(u1)
+    Lu = F(un)
+    u1 = un + (2.0 / 5.0) * dt * Lu
 
-    # Stage 3
-    u3 = (3.0 / 5.0) * un + (2.0 / 5.0) * u2 + (1.0 / 4.0) * dt * F(u2)
+    Lu1 = F(u1)
+    u2 = 0.5 * un + 0.5 * u1 + (1.0 / 5.0) * dt * Lu1
 
-    # Stage 4
-    u4 = (1.0 / 5.0) * un + (4.0 / 5.0) * u3 + (1.0 / 2.0) * dt * F(u3)
+    Lu2 = F(u2)
+    u3 = 0.6 * un + 0.4 * u2 + (1.0 / 4.0) * dt * Lu2
 
-    # Stage 5
-    un1 = (1.0 / 2.0) * u2 + (1.0 / 10.0) * u3 + (2.0 / 5.0) * u4 + (3.0 / 50.0) * dt * F(u3) + (1 / 5) * dt * F(u4)
+    Lu3 = F(u3)
+    u4 = 0.2 * un + 0.8 * u3 + 0.5 * dt * Lu3
 
-    return un1
+    Lu4 = F(u4)
+    u_next = 0.5 * u2 + 0.1 * u3 + 0.4 * u4 + (3.0 / 50.0) * dt * Lu3 + 0.2 * dt * Lu4
+
+    return u_next
