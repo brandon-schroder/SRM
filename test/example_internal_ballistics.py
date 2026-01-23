@@ -14,9 +14,9 @@ def main():
 
     df = pd.read_csv('nozzle_area_dist.csv')
     # Force the arrays to match your simulation precision
-    x_geom = (df['x'] * 1e-3).values.astype(precision)
-    A_geom = (df['a'] * 1e-6).values.astype(precision)
-    P_geom = (np.ones_like(x_geom) * 1.0).astype(precision)
+    x_geom = (df['x'] * 1e-3).values
+    A_geom = (df['a'] * 1e-6).values
+    P_geom = (np.ones_like(x_geom) * 1.0)
 
     for i in range(len(x_geom)): # No propellant in the nozzle
         if x_geom[i] > 0.1:
