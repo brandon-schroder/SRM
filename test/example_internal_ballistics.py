@@ -78,8 +78,8 @@ def main():
         # Monitor progress every 1000 steps
         step_count = int(solver.state.t / dt)
         if step_count % 1000 == 0:
-            max_p = np.max(solver.state.p) / 1e5
-            print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} bar")
+            max_p = np.max(solver.state.p) / 1e6
+            print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa")
 
     # [CHANGE 3] Finalize the recorder!
     # This flushes the RAM buffer to disk and calculates Total Impulse.

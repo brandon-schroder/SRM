@@ -25,13 +25,19 @@ class IBSolver:
         Interpolates external geometry onto the grid.
         CRITICAL: Clamps Area to prevent division by zero in boundary conditions.
         """
-
+        ng = self.grid.ng
         target_dtype = self.cfg.dtype
 
         # Interpolate onto the solver's x coordinates (including ghosts)
         self.state.A = np.interp(self.grid.x_coords, x, A).astype(target_dtype)
         self.state.P = np.interp(self.grid.x_coords, x, P).astype(target_dtype)
         self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted).astype(target_dtype)
+
+        # Assign values to ghost cells
+        geom_arrays = [self.state.A, self.state.P, self.state.P_wetted]
+        for arr in geom_arrays:
+            arr[:ng] = arr[ng]  # Inlet Ghosts = First Interior Cell
+            arr[-ng:] = arr[-ng - 1]  # Outlet Ghosts = Last Interior Cell
 
         # Calculate gradients (Central Difference)
         self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * self.grid.dx)
@@ -76,7 +82,7 @@ class IBSolver:
             compute_primitives_jit(U_full, self.state.A, self.cfg.gamma)
 
         # Update Burn Rate
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
+        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
 
         # Adaptive dissipation
         alpha = np.abs(self.state.u) + self.state.c # Local wave speed calculation (Rusanov)
