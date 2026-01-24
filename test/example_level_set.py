@@ -103,13 +103,13 @@ def main():
         # Note: HDF5Logger stores these as (Time, Space)
         # We take the last time step [-1] for the spatial plot
         x_dist = f["fields/x"][-1, :]
-        a_prop_dist = f["fields/A_propellant"][-1, :]
+        a_prop_dist = f["fields/A_flow"][-1, :]
         a_case_dist = f["fields/A_casing"][-1, :]
 
         # 3. Load Midpoint History
         # Calculate index for the middle of the grain along the Z-axis
         mid_idx = a_prop_dist.shape[0] // 2
-        a_mid_hist = f["fields/A_propellant"][:, mid_idx]
+        a_mid_hist = f["fields/A_flow"][:, mid_idx]
 
     # --- Plotting ---
     fig, ax = plt.subplots(2, 1, figsize=(10, 8))

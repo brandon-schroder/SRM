@@ -38,7 +38,7 @@ class CoupledSolver:
         """
         # Get geometric distributions from LS
         x = self.ls.state.x
-        A = self.ls.state.A_propellant
+        A = self.ls.state.A_flow
         P = self.ls.state.P_propellant
         P_wetted = self.ls.state.P_wetted
 

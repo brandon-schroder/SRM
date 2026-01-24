@@ -15,11 +15,11 @@ class LSRecorder(HDF5Logger):
 
         # 1. Define Variables to Track in HDF5
         scalar_names = ["time", "dt"]
-        field_names =  ["x", "A_propellant", "A_casing", "P_propellant", "P_wetted"]
+        field_names = ["x", "A_flow", "A_casing", "P_propellant", "P_wetted"]
 
         # 2. Determine Field Shape
         nz = solver.grid.dims[2]
-        field_shape = (nz - 1,) # geometry.py works on intermediate grid points
+        field_shape = (nz - 1,)  # geometry.py works on intermediate grid points
 
         # 3. Initialize Base Logger (HDF5)
         filename = getattr(self.cfg, "output_filename", "level_set.h5")
@@ -34,7 +34,7 @@ class LSRecorder(HDF5Logger):
             os.makedirs(self.vtk_dir)
 
         self.step_count = 0
-        self.recorded_times = []  # <--- New: Track physical time for each step
+        self.recorded_times = []  # Tracks physical time for VTK steps only
 
     def save(self):
         """
@@ -43,32 +43,37 @@ class LSRecorder(HDF5Logger):
         """
         s = self.solver.state
 
-        # Track the time for this step
-        self.recorded_times.append(float(s.t))
+        # Get intervals
+        int_h5 = getattr(self.cfg, 'log_interval_hdf5', 10)
+        int_vtk = getattr(self.cfg, 'log_interval_vtk', 100)
 
         # --- HDF5 Calculations & Logging ---
+        if self.step_count % int_h5 == 0:
+            self.log_scalar("time", s.t)
+            self.log_scalar("dt", getattr(self.solver, 'dt', 0.0))
 
-        self.log_scalar("time", s.t)
-        self.log_scalar("dt", getattr(self.solver, 'dt', 0.0))
+            self.log_field("x", s.x)
+            self.log_field("A_flow", s.A_flow)
+            self.log_field("A_casing", s.A_casing)
+            self.log_field("P_propellant", s.P_propellant)
+            self.log_field("P_wetted", s.P_wetted)
 
-        self.log_field("x", s.x)
-        self.log_field("A_propellant", s.A_propellant)
-        self.log_field("A_casing", s.A_casing)
-        self.log_field("P_propellant", s.P_propellant)
-        self.log_field("P_wetted", s.P_wetted)
-
-        self.check_buffer()
+            self.check_buffer()
 
         # --- VTK Logging ---
-        vtk_name = f"step_{self.step_count:05d}.vtk"
-        vtk_path = os.path.join(self.vtk_dir, vtk_name)
+        if self.step_count % int_vtk == 0:
+            # Track the time specifically for this VTK frame
+            self.recorded_times.append(float(s.t))
 
-        # Update and save the 3D grid
-        self.solver.grid.pv_grid["propellant"] = s.phi.flatten(order='F')
-        if hasattr(s, 'br'):
-            self.solver.grid.pv_grid["burn_rate"] = s.br.flatten(order='F')
+            vtk_name = f"step_{self.step_count:05d}.vtk"
+            vtk_path = os.path.join(self.vtk_dir, vtk_name)
 
-        self.solver.grid.pv_grid.save(vtk_path)
+            # Update and save the 3D grid
+            self.solver.grid.pv_grid["propellant"] = s.phi.flatten(order='F')
+            if hasattr(s, 'br'):
+                self.solver.grid.pv_grid["burn_rate"] = s.br.flatten(order='F')
+
+            self.solver.grid.pv_grid.save(vtk_path)
 
         self.step_count += 1
 
@@ -85,7 +90,7 @@ class LSRecorder(HDF5Logger):
         series_data = {
             "file-series-version": "1.0",
             "files": [
-                {"name": f"step_{i:05d}.vtk", "time": t}
+                {"name": f"step_{i * getattr(self.cfg, 'log_interval_vtk', 100):05d}.vtk", "time": t}
                 for i, t in enumerate(self.recorded_times)
             ]
         }

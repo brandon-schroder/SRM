@@ -27,6 +27,9 @@ class SimulationConfig:
     output_filename: str = "output.h5"
     vtk_dir: str = "vtk_output"
 
+    log_interval_hdf5: int = 10  # Log 1D profiles every 10 steps
+    log_interval_vtk: int = 100  # Save 3D .vtk files every 100 steps
+
     dtype: np.dtype = np.float64
 
 
@@ -44,7 +47,7 @@ class State:
     phi: np.ndarray = field(init=False)
     casing: np.ndarray = field(init=False)
     grad_mag: np.ndarray = field(init=False)
-    A_propellant: np.ndarray = field(init=False)
+    A_flow: np.ndarray = field(init=False)
     A_casing: np.ndarray = field(init=False)
     P_propellant: np.ndarray = field(init=False)
     P_wetted: np.ndarray = field(init=False)
@@ -57,7 +60,7 @@ class State:
         self.casing = np.zeros(self.dims, dtype=self.dtype)
         self.grad_mag = np.zeros(self.dims, dtype=self.dtype)
         self.br = np.zeros(self.dims, dtype=self.dtype)
-        self.A_propellant = np.zeros(self.dims[2], dtype=self.dtype)
+        self.A_flow = np.zeros(self.dims[2], dtype=self.dtype)
         self.A_casing = np.zeros(self.dims[2], dtype=self.dtype)
         self.P_propellant = np.zeros(self.dims[2], dtype=self.dtype)
         self.P_wetted = np.zeros(self.dims[2], dtype=self.dtype)

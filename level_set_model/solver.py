@@ -69,7 +69,7 @@ class LSSolver:
         z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = compute_geometric_distributions(self.grid, self.state)
 
         self.state.x = z_coords
-        self.state.A_propellant = flow_areas
+        self.state.A_flow = flow_areas
         self.state.P_propellant = perimeters
         self.state.P_wetted = hydraulic_perimeters
         self.state.A_casing = casing_areas
@@ -115,7 +115,7 @@ class LSSolver:
         """
         return pd.DataFrame({
             "x": self.state.x,
-            "Area_Prop": self.state.A_propellant,
+            "Area_Prop": self.state.A_flow,
             "Area_Case": self.state.A_casing,
             "Perimeter": self.state.P_propellant
         })
