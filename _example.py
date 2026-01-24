@@ -70,7 +70,7 @@ while solver.t < coupled_conf.t_end:
     df_step = pd.DataFrame({
         "t": solver.ls.state.t,
         "x": solver.ls.state.x,
-        "A": solver.ls.state.A_propellant,
+        "A": solver.ls.state.A_flow,
         "P": solver.ls.state.P_propellant
     })
     history.append(df_step)
@@ -78,7 +78,7 @@ while solver.t < coupled_conf.t_end:
     # ========================================================
     # DEBUGGING: Check for bad areas
 
-    areas  = solver.ls.state.A_propellant
+    areas  = solver.ls.state.A_flow
     z_distances = solver.ls.state.x
 
 

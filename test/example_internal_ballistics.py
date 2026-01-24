@@ -23,6 +23,8 @@ def main():
             P_geom[i] = 0.0
 
     P_wetted = P_geom
+    A_casing = A_geom
+    A_propellant = A_geom
 
     # ---------------------------------------------------------
     # 1. Configuration
@@ -53,7 +55,7 @@ def main():
     # 2. Solver Setup
     # ---------------------------------------------------------
     solver = IBSolver(config)
-    solver.set_geometry(x_geom, A_geom, P_geom, P_wetted)
+    solver.set_geometry(x_geom, A_geom, P_geom, P_wetted, A_propellant, A_casing)
     solver.initialize()
 
     print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")

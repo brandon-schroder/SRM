@@ -20,7 +20,8 @@ class IBSolver:
         self.state = FlowState(n_cells=self.grid.dims[0], dtype=self.cfg.dtype)
 
 
-    def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray):
+    def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
+                     A_propellant: np.ndarray, A_casing: np.ndarray):
         """
         Interpolates external geometry onto the grid.
         CRITICAL: Clamps Area to prevent division by zero in boundary conditions.
@@ -33,8 +34,11 @@ class IBSolver:
         self.state.P = np.interp(self.grid.x_coords, x, P).astype(target_dtype)
         self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted).astype(target_dtype)
 
+        self.state.A_propellant = np.interp(self.grid.x_coords, x, A_propellant).astype(target_dtype)
+        self.state.A_casing = np.interp(self.grid.x_coords, x, A_casing).astype(target_dtype)
+
         # Assign values to ghost cells
-        geom_arrays = [self.state.A, self.state.P, self.state.P_wetted]
+        geom_arrays = [self.state.A, self.state.P, self.state.P_wetted, self.state.A_propellant, self.state.A_casing]
         for arr in geom_arrays:
             arr[:ng] = arr[ng]  # Inlet Ghosts = First Interior Cell
             arr[-ng:] = arr[-ng - 1]  # Outlet Ghosts = Last Interior Cell

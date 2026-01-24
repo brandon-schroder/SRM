@@ -28,10 +28,20 @@ class IBRecorder(HDF5Logger):
         # 4. Save Configuration Metadata
         self.save_config(self.cfg)
 
+        # 5. Initialize Step Counter
+        self.step_count = 0
+
     def save(self):
         """
         Calculates current performance metrics and pushes data to the logger buffer.
+        Respects log_interval configuration.
         """
+        # Check if we should log this step
+        interval = getattr(self.cfg, 'log_interval', 1)
+        if self.step_count % interval != 0:
+            self.step_count += 1
+            return
+
         s = self.solver.state
         grid = self.solver.grid
 
@@ -41,11 +51,10 @@ class IBRecorder(HDF5Logger):
         idx_head = grid.ng
         idx_exit = -1 - grid.ng
 
-        # [FIX] Changed s.area to s.A to match FlowState in solver.py
         p_exit = s.p[idx_exit]
         u_exit = s.u[idx_exit]
         rho_exit = s.rho[idx_exit]
-        area_exit = s.A[idx_exit]  # Corrected from .area
+        area_exit = s.A[idx_exit]
         p_head = s.p[idx_head]
 
         # 1. Mass Flow Rate
@@ -60,7 +69,6 @@ class IBRecorder(HDF5Logger):
         isp = thrust / (m_dot * g0) if m_dot > 1e-9 else 0.0
 
         # 4. Mach Number (Derived Field)
-        # Using s.c (speed of sound) which is already computed in the solver
         mach = s.u / (s.c + 1e-16)
 
         # --- Log Data ---
@@ -76,20 +84,23 @@ class IBRecorder(HDF5Logger):
         self.log_field("velocity", s.u)
         self.log_field("density", s.rho)
         self.log_field("mach", mach)
-        self.log_field("area", s.A)  # Corrected from s.area
+        self.log_field("area", s.A)
 
         # Handle buffering/flushing
         self.check_buffer()
+
+        # Increment step count
+        self.step_count += 1
 
     def finalize(self):
         super().finalize()
 
         with h5py.File(self.filename, "r") as f:
-            t = f["timeseries/time"][:]
-            F = f["timeseries/thrust"][:]
-            p_head = f["timeseries/p_head"][:]
-
-            if len(t) > 1:
+            # Check if datasets exist and have data before reading
+            if "timeseries/time" in f and f["timeseries/time"].shape[0] > 1:
+                t = f["timeseries/time"][:]
+                F = f["timeseries/thrust"][:]
+                p_head = f["timeseries/p_head"][:]
 
                 total_impulse = np.trapezoid(F, x=t)
                 max_p_head = np.max(p_head)

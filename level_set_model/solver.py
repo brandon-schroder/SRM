@@ -69,9 +69,9 @@ class LSSolver:
         z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = compute_geometric_distributions(self.grid, self.state)
 
         self.state.x = z_coords
-        self.state.A_flow = flow_areas
         self.state.P_propellant = perimeters
         self.state.P_wetted = hydraulic_perimeters
+        self.state.A_flow = flow_areas
         self.state.A_casing = casing_areas
         self.state.A_propellant = propellant_areas
 

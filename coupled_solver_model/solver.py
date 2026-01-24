@@ -41,9 +41,11 @@ class CoupledSolver:
         A = self.ls.state.A_flow
         P = self.ls.state.P_propellant
         P_wetted = self.ls.state.P_wetted
+        A_propellant = self.ls.state.A_propellant
+        A_casing = self.ls.state.A_casing
 
         # Update IB Geometry
-        self.ib.set_geometry(x, A, P, P_wetted)
+        self.ib.set_geometry(x, A, P, P_wetted, A_propellant, A_casing)
 
     def step(self):
         """

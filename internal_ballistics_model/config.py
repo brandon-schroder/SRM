@@ -40,6 +40,7 @@ class SimulationConfig:
     erosive_m: float = -0.125
     erosive_gth: float = 35.0
 
+    log_interval: int = 1
     dtype: np.dtype = np.float64
 
 
@@ -59,10 +60,13 @@ class FlowState:
     u: np.ndarray = field(init=False)
     p: np.ndarray = field(init=False)
     c: np.ndarray = field(init=False)
+
     A: np.ndarray = field(init=False)
     dAdz: np.ndarray = field(init=False)
     P: np.ndarray = field(init=False)
     P_wetted: np.ndarray = field(init=False)
+    A_casing: np.ndarray = field(init=False)
+    A_propellant: np.ndarray = field(init=False)
 
     br: np.ndarray = field(init=False)
     eta: np.ndarray = field(init=False)
@@ -79,6 +83,8 @@ class FlowState:
         self.dAdz = np.zeros(shape, dtype=self.dtype)
         self.P = np.zeros(shape, dtype=self.dtype)
         self.P_wetted = np.zeros(shape, dtype=self.dtype)
+        self.A_casing = np.zeros(shape, dtype=self.dtype)
+        self.A_propellant = np.zeros(shape, dtype=self.dtype)
 
         self.br = np.zeros(shape, dtype=self.dtype)
         self.eta = np.zeros(shape, dtype=self.dtype)
