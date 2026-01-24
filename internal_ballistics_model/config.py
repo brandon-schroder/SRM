@@ -40,6 +40,7 @@ class SimulationConfig:
     erosive_m: float = -0.125
     erosive_gth: float = 35.0
 
+    output_filename: str = "internal_ballistics.h5"
     log_interval: int = 1
     dtype: np.dtype = np.float64
 

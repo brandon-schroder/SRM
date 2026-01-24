@@ -21,7 +21,8 @@ class IBRecorder(HDF5Logger):
         field_shape = (n_cells_total,)
 
         # 3. Initialize Base Logger
-        filename = getattr(self.cfg, "output_filename", "internal_ballistics.h5")
+        # We now trust the config to have this field
+        filename = self.cfg.output_filename
 
         super().__init__(filename, scalar_names, field_names, field_shape, buffer_size)
 
