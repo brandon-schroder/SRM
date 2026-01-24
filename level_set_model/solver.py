@@ -73,6 +73,7 @@ class LSSolver:
         self.state.P_propellant = perimeters
         self.state.P_wetted = hydraulic_perimeters
         self.state.A_casing = casing_areas
+        self.state.A_propellant = propellant_areas
 
 
     def set_burn_rate(self, x: np.ndarray, br: np.ndarray):
