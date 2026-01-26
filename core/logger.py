@@ -4,129 +4,124 @@ import os
 
 
 class HDF5Logger:
-    def __init__(self, filename, scalar_names, field_names, field_shape, buffer_size=5000, overwrite=True):
+    def __init__(self, filename, scalar_names, field_names, field_shape, buffer_size=100, units=None):
         """
-        Generic HDF5 Logger.
+        Base HDF5 Logger.
+        Handles buffering and writing of time-series data to disk.
 
         Args:
-            filename (str): Path to the output .h5 file.
-            scalar_names (list): List of strings for 0D values (e.g., 'time', 'thrust').
-            field_names (list): List of strings for spatial arrays (e.g., 'pressure').
-            field_shape (tuple or int): The shape of a single field snapshot (e.g., (n_cells,)).
-            buffer_size (int): Number of steps to store in RAM before flushing to disk.
-            overwrite (bool): If True, deletes existing file at filename.
+            units (dict, optional): Dictionary mapping variable names to unit strings.
+                                    e.g., {"pressure": "Pa", "time": "s"}
         """
         self.filename = filename
-        self.buffer_size = buffer_size
         self.scalar_names = scalar_names
         self.field_names = field_names
+        self.field_shape = field_shape
+        self.buffer_size = buffer_size
+        self.units = units or {}
 
-        # Ensure field_shape is a tuple
-        if isinstance(field_shape, int):
-            self.field_shape = (field_shape,)
-        else:
-            self.field_shape = tuple(field_shape)
+        # In-memory buffers
+        self.scalar_buffer = {name: [] for name in scalar_names}
+        self.field_buffer = {name: [] for name in field_names}
+        self.buffer_count = 0
 
-        # Initialize Buffer
-        self.buffer = {name: [] for name in scalar_names + field_names}
-
-        # 1. Setup File
-        if overwrite and os.path.exists(filename):
-            os.remove(filename)
-
+        # Initialize file (truncate if exists)
         with h5py.File(self.filename, "w") as f:
             # Create Groups
-            f.create_group("config")
-            f.create_group("summary")
-            g_ts = f.create_group("timeseries")
+            g_scalars = f.create_group("timeseries")
             g_fields = f.create_group("fields")
 
-            # --- Create Scalar Datasets (1D) ---
+            # Initialize Resizable Datasets for Scalars
             for name in scalar_names:
-                # Chunking is crucial for performance when resizing
-                g_ts.create_dataset(name, shape=(0,), maxshape=(None,), chunks=(1000,))
+                unit = self.units.get(name, "")
+                self._create_dataset_with_units(g_scalars, name, (0,), (None,), unit)
 
-            # --- Create Field Datasets (N+1 Dimensions) ---
-            # Shape = (Time, Space...)
-            max_shape = (None,) + self.field_shape
-            # Heuristic chunking: 100 time steps x full spatial domain
-            chunk_shape = (100,) + self.field_shape
-
+            # Initialize Resizable Datasets for Fields
+            # Shape is (Time, Space...)
+            max_shape = (None,) + field_shape
+            chunk_shape = (1,) + field_shape
             for name in field_names:
-                g_fields.create_dataset(name, shape=(0,) + self.field_shape,
-                                        maxshape=max_shape, chunks=chunk_shape)
+                unit = self.units.get(name, "")
+                self._create_dataset_with_units(g_fields, name, (0,) + field_shape, max_shape, unit, chunks=chunk_shape)
+
+    def _create_dataset_with_units(self, group, name, shape, maxshape, unit, chunks=None):
+        """Helper to create a dataset and attach the unit attribute."""
+        dset = group.create_dataset(name, shape=shape, maxshape=maxshape, dtype='float32', chunks=chunks)
+        if unit:
+            dset.attrs["units"] = unit
+        return dset
 
     def save_config(self, config_obj):
-        """Saves a configuration object or dictionary to the /config group."""
+        """
+        Saves configuration attributes to the root of the HDF5 file.
+        """
         with h5py.File(self.filename, "a") as f:
-            g_conf = f["config"]
+            for key, val in vars(config_obj).items():
+                # HDF5 attributes support limited types (int, float, string)
+                if isinstance(val, (int, float, str, bool)):
+                    f.attrs[key] = val
+                elif isinstance(val, list):
+                    # Convert list to string representation if needed
+                    f.attrs[key] = str(val)
 
-            # Handle object vs dict
-            conf_dict = config_obj.__dict__ if hasattr(config_obj, '__dict__') else config_obj
-
-            for k, v in conf_dict.items():
-                # HDF5 attributes support limited types
-                if isinstance(v, (int, float, str, bool)):
-                    g_conf.attrs[k] = v
-                elif v is None:
-                    g_conf.attrs[k] = "None"
+    def save_summary(self, summary_dict):
+        """
+        Saves summary statistics (e.g., total impulse) to attributes.
+        """
+        with h5py.File(self.filename, "a") as f:
+            for key, val in summary_dict.items():
+                f.attrs[key] = val
 
     def log_scalar(self, name, value):
-        """Append a scalar value to the buffer."""
-        if name in self.buffer:
-            self.buffer[name].append(value)
-        else:
-            raise KeyError(f"Scalar '{name}' was not defined in init.")
+        if name in self.scalar_buffer:
+            self.scalar_buffer[name].append(value)
 
-    def log_field(self, name, array):
-        """Append a spatial field to the buffer (automatically copies)."""
-        if name in self.buffer:
-            self.buffer[name].append(np.array(array, copy=True))
-        else:
-            raise KeyError(f"Field '{name}' was not defined in init.")
+    def log_field(self, name, value):
+        if name in self.field_buffer:
+            self.field_buffer[name].append(value)
 
     def check_buffer(self):
-        """Checks if buffer is full and flushes if necessary."""
-        # Check length of the first scalar (usually 'time') or first field
-        check_key = self.scalar_names[0] if self.scalar_names else self.field_names[0]
-
-        if len(self.buffer[check_key]) >= self.buffer_size:
+        self.buffer_count += 1
+        if self.buffer_count >= self.buffer_size:
             self.flush()
 
     def flush(self):
-        """Writes the buffer to disk and clears it."""
-        # Determine number of new records based on the first key
-        first_key = self.scalar_names[0] if self.scalar_names else self.field_names[0]
-        n_new = len(self.buffer[first_key])
-
-        if n_new == 0: return
+        if self.buffer_count == 0:
+            return
 
         with h5py.File(self.filename, "a") as f:
-            # 1. Write Scalars
+            # Flush Scalars
+            g_scalars = f["timeseries"]
             for name in self.scalar_names:
-                dset = f[f"timeseries/{name}"]
-                dset.resize((dset.shape[0] + n_new,))
-                dset[-n_new:] = self.buffer[name]
-                self.buffer[name] = []  # Clear buffer
+                data = self.scalar_buffer[name]
+                if not data: continue
 
-            # 2. Write Fields
+                dset = g_scalars[name]
+                n_current = dset.shape[0]
+                n_new = len(data)
+
+                dset.resize(n_current + n_new, axis=0)
+                dset[n_current:] = data
+
+                self.scalar_buffer[name] = []  # Clear buffer
+
+            # Flush Fields
+            g_fields = f["fields"]
             for name in self.field_names:
-                dset = f[f"fields/{name}"]
-                # Resize the time axis (axis 0)
-                current_len = dset.shape[0]
-                dset.resize((current_len + n_new,) + self.field_shape)
+                data = self.field_buffer[name]
+                if not data: continue
 
-                # Stack list of arrays into a (N_new, Space...) array
-                dset[current_len:, ...] = np.stack(self.buffer[name])
-                self.buffer[name] = []  # Clear buffer
+                dset = g_fields[name]
+                n_current = dset.shape[0]
+                n_new = len(data)
 
-    def save_summary(self, summary_dict):
-        """Saves calculated summary stats to /summary attributes."""
-        with h5py.File(self.filename, "a") as f:
-            g_sum = f["summary"]
-            for k, v in summary_dict.items():
-                g_sum.attrs[k] = v
+                # Resize only the time axis (axis 0)
+                dset.resize(n_current + n_new, axis=0)
+                dset[n_current:] = np.array(data)
+
+                self.field_buffer[name] = []  # Clear buffer
+
+        self.buffer_count = 0
 
     def finalize(self):
-        """Flushes remaining data."""
         self.flush()

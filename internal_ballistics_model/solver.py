@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from typing import Tuple
 
 # Import functions
 from .grid import *
@@ -6,6 +8,7 @@ from .boundary import *
 from .burn_rate import *
 from .numerics import *
 
+from .postprocess import PerformanceAnalyzer
 from core.time_integrators import ssp_rk_3_3
 
 
@@ -19,12 +22,14 @@ class IBSolver:
         # 2. Allocate State
         self.state = FlowState(n_cells=self.grid.dims[0], dtype=self.cfg.dtype)
 
+        # 3. Initialize Post-Processor
+        self.analyzer = PerformanceAnalyzer(self.cfg)
+        self.dt = 0.0
 
     def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
                      A_propellant: np.ndarray, A_casing: np.ndarray):
         """
         Interpolates external geometry onto the grid.
-        CRITICAL: Clamps Area to prevent division by zero in boundary conditions.
         """
         ng = self.grid.ng
         target_dtype = self.cfg.dtype
@@ -52,14 +57,13 @@ class IBSolver:
 
     def initialize(self):
         """Sets initial conditions."""
-
         self.state.rho[:] = self.cfg.p_inf / (self.cfg.R * self.cfg.t_initial)
         self.state.p[:] = self.cfg.p_inf
         self.state.u[:] = self.cfg.u_initial
         self.state.br[:] = self.state.br + self.cfg.br_initial
 
         self.state.U[:] = primitive_to_conserved(
-            self.state.rho, self.state.u, self.state.p,self.state.A, self.cfg.gamma
+            self.state.rho, self.state.u, self.state.p, self.state.A, self.cfg.gamma
         )
 
         # Explicitly update primitives once to ensure consistency
@@ -75,7 +79,6 @@ class IBSolver:
         U_full[:, self.grid.interior] = U_interior
 
         # Apply Boundary Conditions
-        # Note: We pass self.state.A which is now guaranteed > 1e-12
         U_full = apply_boundary_jit(
             U_full, self.state.A, self.cfg.gamma, self.cfg.R,
             self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng
@@ -89,8 +92,7 @@ class IBSolver:
         self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
 
         # Adaptive dissipation
-        alpha = np.abs(self.state.u) + self.state.c # Local wave speed calculation (Rusanov)
-        # Fallback if alpha is NaN (rare)
+        alpha = np.abs(self.state.u) + self.state.c
         alpha = np.nan_to_num(alpha, nan=1000.0)
 
         # Fluxes
@@ -110,20 +112,32 @@ class IBSolver:
         return S - dFdx
 
     def step(self) -> Tuple[float, float]:
-
         # Adaptive Timestep
-        dt = adaptive_timestep(
+        self.dt = adaptive_timestep(
             self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng,
             self.state.t, self.cfg.t_end)
 
         # Time Integration (SSP-RK3)
         U_int = self.state.U[:, self.grid.interior]
-        U_new = ssp_rk_3_3(U_int, dt, self._compute_rhs)
+        U_new = ssp_rk_3_3(U_int, self.dt, self._compute_rhs)
         self.state.U[:, self.grid.interior] = U_new
 
+        self.state.t += self.dt
+        return self.dt, self.state.t
 
-        self.state.t += dt
-        return dt, self.state.t
+    def get_derived_quantities(self):
+        """
+        Calculates derived physics metrics.
+        Delegates physics to self.analyzer and injects time/dt.
+        """
+        # 1. Compute Physics
+        data = self.analyzer.compute_metrics(self.state, self.grid)
+
+        # 2. Inject Solver State (Time)
+        data["scalars"]["time"] = self.state.t
+        data["scalars"]["dt"] = self.dt
+
+        return data
 
     def get_dataframe(self) -> pd.DataFrame:
         sl = self.grid.interior
