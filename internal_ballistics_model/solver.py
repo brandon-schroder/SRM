@@ -2,29 +2,38 @@ import pandas as pd
 import numpy as np
 from typing import Tuple
 
-# Import functions
+# Imports
 from .grid import *
 from .boundary import *
 from .burn_rate import *
 from .numerics import *
+from .config import *
+from .postprocess import *
 
-from .postprocess import PerformanceAnalyzer
+from core.logger import *
 from core.time_integrators import ssp_rk_3_3
 
 
 class IBSolver:
     def __init__(self, config: SimulationConfig):
         self.cfg = config
-
-        # 1. Build Grid
         self.grid = Grid1D(config)
-
-        # 2. Allocate State
         self.state = FlowState(n_cells=self.grid.dims[0], dtype=self.cfg.dtype)
-
-        # 3. Initialize Post-Processor
-        self.analyzer = PerformanceAnalyzer(self.cfg)
         self.dt = 0.0
+
+        # --- Internalized Recorder ---
+        self.recorder = SimulationRecorder(
+            solver=self,
+            state_map={
+                "pressure": {"attr": "p", "unit": "Pa"},
+                "velocity": {"attr": "u", "unit": "m/s"},
+                "density": {"attr": "rho", "unit": "kg/m^3"},
+                "area": {"attr": "A", "unit": "m^2"}
+            },
+            metrics_def=METRICS,
+            geometry_callback=save_1d_geometry,
+            summary_callback=compute_summary_stats
+        )
 
     def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
                      A_propellant: np.ndarray, A_casing: np.ndarray):
@@ -34,7 +43,6 @@ class IBSolver:
         ng = self.grid.ng
         target_dtype = self.cfg.dtype
 
-        # Interpolate onto the solver's x coordinates (including ghosts)
         self.state.A = np.interp(self.grid.x_coords, x, A).astype(target_dtype)
         self.state.P = np.interp(self.grid.x_coords, x, P).astype(target_dtype)
         self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted).astype(target_dtype)
@@ -45,13 +53,11 @@ class IBSolver:
         # Assign values to ghost cells
         geom_arrays = [self.state.A, self.state.P, self.state.P_wetted, self.state.A_propellant, self.state.A_casing]
         for arr in geom_arrays:
-            arr[:ng] = arr[ng]  # Inlet Ghosts = First Interior Cell
-            arr[-ng:] = arr[-ng - 1]  # Outlet Ghosts = Last Interior Cell
+            arr[:ng] = arr[ng]
+            arr[-ng:] = arr[-ng - 1]
 
-        # Calculate gradients (Central Difference)
+        # Calculate gradients
         self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * self.grid.dx)
-
-        # Boundaries (Neumann)
         self.state.dAdz[0] = self.state.dAdz[1]
         self.state.dAdz[-1] = self.state.dAdz[-2]
 
@@ -65,43 +71,33 @@ class IBSolver:
         self.state.U[:] = primitive_to_conserved(
             self.state.rho, self.state.u, self.state.p, self.state.A, self.cfg.gamma
         )
-
-        # Explicitly update primitives once to ensure consistency
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
 
+        # Log initial state
+        self.recorder.save()
+
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
-        """
-        The Spatial Operator L(U).
-        Calculates dU/dt = -dF/dx + S
-        """
-        # Map interior to full state
         U_full = self.state.U
         U_full[:, self.grid.interior] = U_interior
 
-        # Apply Boundary Conditions
         U_full = apply_boundary_jit(
             U_full, self.state.A, self.cfg.gamma, self.cfg.R,
             self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng
         )
 
-        # Update Primitives
         self.state.rho, self.state.u, self.state.p, self.state.c = \
             compute_primitives_jit(U_full, self.state.A, self.cfg.gamma)
 
-        # Update Burn Rate
         self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="MP")
 
-        # Adaptive dissipation
         alpha = np.abs(self.state.u) + self.state.c
         alpha = np.nan_to_num(alpha, nan=1000.0)
 
-        # Fluxes
         F_hat = compute_numerical_flux_jit(
             U_full, self.state.A, self.state.rho, self.state.u,
             self.state.p, alpha, self.cfg.ng
         )
 
-        # Source Terms
         S = source_jit(
             self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior],
             self.cfg.R, self.cfg.gamma, self.state.p[self.grid.interior],
@@ -112,32 +108,30 @@ class IBSolver:
         return S - dFdx
 
     def step(self) -> Tuple[float, float]:
-        # Adaptive Timestep
         self.dt = adaptive_timestep(
             self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng,
             self.state.t, self.cfg.t_end)
 
-        # Time Integration (SSP-RK3)
         U_int = self.state.U[:, self.grid.interior]
         U_new = ssp_rk_3_3(U_int, self.dt, self._compute_rhs)
         self.state.U[:, self.grid.interior] = U_new
 
         self.state.t += self.dt
+
+        # Log new state
+        self.recorder.save()
+
         return self.dt, self.state.t
 
     def get_derived_quantities(self):
-        """
-        Calculates derived physics metrics.
-        Delegates physics to self.analyzer and injects time/dt.
-        """
-        # 1. Compute Physics
-        data = self.analyzer.compute_metrics(self.state, self.grid)
-
-        # 2. Inject Solver State (Time)
+        data = compute_metrics(self.state, self.grid, self.cfg)
         data["scalars"]["time"] = self.state.t
         data["scalars"]["dt"] = self.dt
-
         return data
+
+    def finalize(self):
+        """Must be called at end of simulation."""
+        self.recorder.finalize()
 
     def get_dataframe(self) -> pd.DataFrame:
         sl = self.grid.interior

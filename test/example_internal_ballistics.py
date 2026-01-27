@@ -4,21 +4,26 @@ import pandas as pd
 import h5py
 import os
 
-# 1. Import the Recorder and Solver
+# 1. Import Config and Solver
 from internal_ballistics_model import SimulationConfig, IBSolver
-from internal_ballistics_model.recorder import IBRecorder
 
 
 def main():
     precision = np.float32
 
     # Load geometry data
-    df = pd.read_csv('nozzle_area_dist.csv')
+    # Ensure the CSV exists or handle the error
+    if os.path.exists('nozzle_area_dist.csv'):
+        df = pd.read_csv('nozzle_area_dist.csv')
+        # Force the arrays to match your simulation precision
+        x_geom = (df['x'] * 1e-3).values.astype(precision)
+        A_geom = (df['a'] * 1e-6).values.astype(precision)
+    else:
+        print("Warning: CSV not found. Using synthetic geometry for demo.")
+        x_geom = np.linspace(0, 0.5, 200, dtype=precision)
+        A_geom = np.ones_like(x_geom) * 0.001
 
-    # Force the arrays to match your simulation precision
-    x_geom = (df['x'] * 1e-3).values
-    A_geom = (df['a'] * 1e-6).values
-    P_geom = (np.ones_like(x_geom) * 1.0)
+    P_geom = (np.ones_like(x_geom) * 1.0).astype(precision)
 
     for i in range(len(x_geom)):
         # No propellant in the nozzle section
@@ -46,7 +51,9 @@ def main():
         br_initial=0,
     )
 
-    # Set the output filename (Required by the new IBRecorder)
+    # Set the output filename
+    # [CRITICAL] This must be set BEFORE initializing the solver,
+    # because the solver initializes the internal recorder using this config.
     config.output_filename = "output_ib.h5"
     config.log_interval = 1  # Log every step
     config.dtype = precision
@@ -56,6 +63,8 @@ def main():
     # ---------------------------------------------------------
     # 2. Solver Setup
     # ---------------------------------------------------------
+    # The Recorder is now automatically instantiated inside IBSolver.
+    # It will also write the static /geometry/x data immediately upon initialization.
     solver = IBSolver(config)
     solver.set_geometry(x_geom, A_geom, P_geom, P_wetted, A_propellant, A_casing)
     solver.initialize()
@@ -63,41 +72,31 @@ def main():
     print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")
 
     # ---------------------------------------------------------
-    # 3. Recorder Setup
-    # ---------------------------------------------------------
-    # Instantiates the new IBRecorder.
-    # This will also write the static /geometry/x data to the file immediately.
-    recorder = IBRecorder(solver)
-
-    # ---------------------------------------------------------
-    # 4. Main Loop
+    # 3. Main Loop
     # ---------------------------------------------------------
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
 
     while solver.state.t < config.t_end:
+        # solver.step() automatically calls self.recorder.save()
         dt, current_time = solver.step()
 
-        # --- Save Data ---
-        # The recorder now delegates math to solver.get_derived_quantities()
-        # and logs units automatically.
-        recorder.save()
-
         # Monitor progress (Basic console output)
-        step_count = int(solver.state.t / dt)
-        if step_count % 1000 == 0:
+        # Using a small epsilon to avoid division by zero on first step
+        step_count = int(solver.state.t / (dt + 1e-16))
+        if step_count % 50 == 0:
             max_p = np.max(solver.state.p) / 1e6
             print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa")
 
     # ---------------------------------------------------------
-    # 5. Finalize
+    # 4. Finalize
     # ---------------------------------------------------------
     # This flushes the buffer, calculates summary stats (Total Impulse),
-    # AND generates the XDMF file for ParaView.
-    recorder.finalize()
-    print(f"XDMF file generated: {config.output_filename.replace('.h5', '.xmf')}")
+    # and generates the XDMF file for ParaView.
+    solver.finalize()
+    print(f"XDMF file generated: {config.output_filename.replace('.h5', '.xdmf')}")
 
     # ---------------------------------------------------------
-    # 6. Post-Processing & Verification
+    # 5. Post-Processing & Verification
     # ---------------------------------------------------------
     print(f"\nSimulation Complete (t = {solver.state.t:.4f} s)")
     print(f"Fetching data from {config.output_filename}...")
@@ -110,16 +109,13 @@ def main():
         u_final = f["fields/velocity"][-1, :]
         A_final = f["fields/area"][-1, :]
 
-        # [NEW] Load Mach directly (Pre-calculated by PerformanceAnalyzer)
-        # This verifies Phase 1 architecture changes
+        # Load Mach directly (Calculated via postprocess.METRICS)
         mach_final = f["fields/mach"][-1, :]
 
-        # [NEW] Load Geometry from file
-        # This verifies Phase 2 architecture changes
+        # Load Geometry from file (Verifies geometry callback worked)
         if "geometry/x" in f:
             x_grid = f["geometry/x"][:]
         else:
-            # Fallback if something went wrong
             x_grid = solver.grid.x_coords
 
         # 2. Load Time-Series Data (Scalars)
@@ -128,12 +124,11 @@ def main():
         thrust_hist = f["timeseries/thrust"][:]
 
         # 3. Retrieve Summary Metrics
-        # [UPDATED] In the new logger, save_summary() writes to root attributes (f.attrs),
-        # not a "summary" group.
+        # These are now stored as root attributes by SimulationRecorder
         total_impulse = f.attrs.get("total_impulse", 0.0)
         max_p_head = f.attrs.get("max_p_head", 0.0)
 
-        # [NEW] Verify Units Attribute (Phase 2)
+        # Verify Units (Feature from Phase 2)
         p_units = f["fields/pressure"].attrs.get("units", "Unknown")
 
         print(f"Total Impulse: {total_impulse:.2f} Ns")
@@ -141,13 +136,11 @@ def main():
         print(f"Pressure Units detected in file: {p_units}")
 
     # --- Plotting ---
-
-    # Figure 1: Spatial Distribution (Final State)
     fig1, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
     # Plot 1: Pressure
     ax[0].plot(x_grid, p_final / 1e5, 'r-', linewidth=2)
-    ax[0].set_ylabel(f'Pressure [bar]')  # We know it's bar because we div by 1e5
+    ax[0].set_ylabel(f'Pressure [bar]')
     ax[0].set_title(f'Internal Ballistics State at t={solver.state.t:.4f}s')
     ax[0].grid(True, alpha=0.3)
 
@@ -163,7 +156,6 @@ def main():
     ax[2].grid(True, alpha=0.3)
 
     ax2_twin = ax[2].twinx()
-    # Plotting the Mach number retrieved directly from HDF5
     ax2_twin.plot(x_grid, mach_final, 'k--', label='Mach (Logged)')
     ax2_twin.set_ylabel('Mach Number')
 

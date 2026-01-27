@@ -1,4 +1,5 @@
 import numpy as np
+import h5py
 
 from .config import SimulationConfig
 
@@ -26,3 +27,26 @@ class Grid1D:
         # 3. Define the "Interior" slice for easy access
         # This allows solver.u[grid.interior] to skip ghost cells
         self.interior = slice(self.ng, -self.ng)
+
+
+def save_1d_geometry(filename, solver):
+    """
+    Callback function to save 1D geometry to HDF5.
+    """
+    with h5py.File(filename, "a") as f:
+        if "geometry" in f:
+            return
+
+        g_geo = f.create_group("geometry")
+
+        # Access the grid from the solver
+        grid = solver.grid
+
+        # Save X coordinates
+        dset_x = g_geo.create_dataset("x", data=grid.x_coords)
+        dset_x.attrs["units"] = "m"
+
+        # Save Zeros (For future 3D visualization compatibility)
+        zeros = np.zeros_like(grid.x_coords)
+        dset_z = g_geo.create_dataset("zeros", data=zeros)
+        dset_z.attrs["units"] = "m"

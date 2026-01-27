@@ -1,59 +1,92 @@
 import numpy as np
+import h5py
 
-class PerformanceAnalyzer:
-    def __init__(self, cfg):
-        """
-        Analyzes the solver state to compute engineering performance metrics.
-        Decouples physics calculations from data I/O.
-        """
-        self.cfg = cfg
-        # Default to standard atmosphere if not specified in config
-        self.p_inf = getattr(cfg, "p_inf", 101325.0)
-        self.g0 = 9.80665
+# Single Source of Truth for Metric Definitions
+METRICS = {
+    "scalars": {
+        "p_head": {"unit": "Pa"},
+        "p_exit": {"unit": "Pa"},
+        "thrust": {"unit": "N"},
+        "isp": {"unit": "s"},
+        "mass_flow": {"unit": "kg/s"},
+    },
+    "fields": {
+        "mach": {"unit": ""}
+    }
+}
 
-    def compute_metrics(self, state, grid):
-        """
-        Computes instantaneous performance metrics from the current state.
 
-        Args:
-            state: The current solver state object (with .p, .u, .rho, .A, .c).
-            grid: The solver grid object (for ghost cell indices).
+def compute_metrics(state, grid, cfg):
+    """
+    Computes instantaneous performance metrics during the simulation.
+    """
+    # 1. Setup Constants
+    p_inf = getattr(cfg, "p_inf", 101325.0)
+    g0 = 9.80665
 
-        Returns:
-            dict: A dictionary containing both scalar 'monitors' and field 'data'.
-        """
-        # Exclude ghost cells for boundary values
-        idx_head = grid.ng
-        idx_exit = -1 - grid.ng
+    # 2. Identify Indices (Boundary logic)
+    idx_head = grid.ng
+    idx_exit = -1 - grid.ng
 
-        # Extract primitive variables at key locations
-        p_exit = state.p[idx_exit]
-        u_exit = state.u[idx_exit]
-        rho_exit = state.rho[idx_exit]
-        area_exit = state.A[idx_exit]
-        p_head = state.p[idx_head]
+    # 3. Extract Primitive Variables
+    p_head = state.p[idx_head]
+    p_exit = state.p[idx_exit]
+    u_exit = state.u[idx_exit]
+    rho_exit = state.rho[idx_exit]
+    area_exit = state.A[idx_exit]
 
-        # 1. Mass Flow Rate
-        m_dot = rho_exit * u_exit * area_exit
+    # 4. Compute Mechanics
+    m_dot = rho_exit * u_exit * area_exit
+    thrust = m_dot * u_exit + (p_exit - p_inf) * area_exit
+    isp = thrust / (m_dot * g0) if m_dot > 1e-9 else 0.0
 
-        # 2. Thrust (Vacuum + Pressure term)
-        thrust = m_dot * u_exit + (p_exit - self.p_inf) * area_exit
+    # Field Calculation
+    mach = state.u / (state.c + 1e-16)
 
-        # 3. Specific Impulse (Isp)
-        isp = thrust / (m_dot * self.g0) if m_dot > 1e-9 else 0.0
-
-        # 4. Mach Number Field
-        mach = state.u / (state.c + 1e-16)
-
-        return {
-            "scalars": {
-                "p_head": p_head,
-                "thrust": thrust,
-                "isp": isp,
-                "mass_flow": m_dot,
-                "p_exit": p_exit
-            },
-            "fields": {
-                "mach": mach
-            }
+    # 5. Return Data
+    return {
+        "scalars": {
+            "p_head": p_head,
+            "p_exit": p_exit,
+            "thrust": thrust,
+            "isp": isp,
+            "mass_flow": m_dot,
+        },
+        "fields": {
+            "mach": mach
         }
+    }
+
+
+def compute_summary_stats(filename: str) -> dict:
+    """
+    Opens the finalized HDF5 file to compute global summary metrics.
+    """
+    stats = {
+        "total_impulse": 0.0,
+        "max_p_head": 0.0,
+        "num_steps": 0
+    }
+
+    try:
+        with h5py.File(filename, "r") as f:
+            if "timeseries/time" in f:
+                t_dset = f["timeseries/time"]
+
+                if t_dset.shape[0] > 1:
+                    t = t_dset[:]
+                    stats["num_steps"] = len(t)
+
+                    # Calculate Total Impulse
+                    if "timeseries/thrust" in f:
+                        F = f["timeseries/thrust"][:]
+                        stats["total_impulse"] = np.trapezoid(F, x=t)
+
+                    # Calculate Peak Pressure
+                    if "timeseries/p_head" in f:
+                        p_head = f["timeseries/p_head"][:]
+                        stats["max_p_head"] = np.max(p_head)
+    except (OSError, KeyError):
+        pass
+
+    return stats
