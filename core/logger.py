@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
-
+import subprocess
+import os
 
 class HDF5Logger:
     def __init__(self, filename, scalar_names, field_names, field_shape, buffer_size=100, units=None):
@@ -29,16 +30,31 @@ class HDF5Logger:
             chunk_shape = (1,) + field_shape
             for name in field_names:
                 unit = self.units.get(name, "")
-                self._create_dataset_with_units(g_fields, name, (0,) + field_shape, max_shape, unit, chunks=chunk_shape)
+                # [Standard] Enable compression for field data
+                self._create_dataset_with_units(
+                    g_fields, name, (0,) + field_shape, max_shape, unit,
+                    chunks=chunk_shape, compression="gzip"
+                )
 
-    def _create_dataset_with_units(self, group, name, shape, maxshape, unit, chunks=None):
-        dset = group.create_dataset(name, shape=shape, maxshape=maxshape, dtype='float32', chunks=chunks)
+    def _create_dataset_with_units(self, group, name, shape, maxshape, unit, chunks=None, compression=None):
+        # [Standard] Added compression argument
+        dset = group.create_dataset(
+            name, shape=shape, maxshape=maxshape,
+            dtype='float32', chunks=chunks, compression=compression
+        )
         if unit:
             dset.attrs["units"] = unit
         return dset
 
     def save_config(self, config_obj):
         with h5py.File(self.filename, "a") as f:
+            # [Standard] Save Git Hash for reproducibility
+            try:
+                repo_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL).strip().decode('utf-8')
+                f.attrs['git_commit'] = repo_hash
+            except:
+                f.attrs['git_commit'] = "unknown"
+
             for key, val in vars(config_obj).items():
                 if isinstance(val, (int, float, str, bool)):
                     f.attrs[key] = val
@@ -119,7 +135,8 @@ class SimulationRecorder(HDF5Logger):
         pp_fields = list(self.metrics_def.get("fields", {}).keys())
         state_vars = list(self.state_map.keys())
 
-        all_scalars = ["time", "dt"] + pp_scalars
+        # Ensure 'time' and 'dt' are always present
+        all_scalars = sorted(list(set(["time", "dt"] + pp_scalars)))
         all_fields = state_vars + pp_fields
 
         # 2. Gather Units
@@ -134,14 +151,16 @@ class SimulationRecorder(HDF5Logger):
         for name, meta in self.state_map.items():
             units[name] = meta.get("unit", "")
 
-        # 3. Determine Field Shape
-        if hasattr(solver, "grid"):
-            n_cells = getattr(solver.grid, "n_cells", 0)
-            ng = getattr(solver.grid, "ng", 0)
-            if n_cells > 0:
-                field_shape = (n_cells + 2 * ng,)
+        # 3. Determine Field Shape (Dynamic Inference)
+        # [Refactor] Decoupled from grid.n_cells. Infers shape from the first state variable.
+        if self.state_map:
+            first_field_info = next(iter(self.state_map.values()))
+            first_attr = first_field_info["attr"]
+            if hasattr(self.solver.state, first_attr):
+                sample_field = getattr(self.solver.state, first_attr)
+                field_shape = sample_field.shape
             else:
-                field_shape = (1,)
+                field_shape = (1,) # Fallback
         else:
             field_shape = (1,)
 
@@ -177,14 +196,14 @@ class SimulationRecorder(HDF5Logger):
         derived_fields = derived.get("fields", {})
 
         # 2. Log Scalars
-        # Explicitly log time/dt if they exist
+        # [Refactor] Explicitly log time/dt first
         if hasattr(self.solver.state, "t"):
             self.log_scalar("time", self.solver.state.t)
         if hasattr(self.solver, "dt"):
             self.log_scalar("dt", self.solver.dt)
 
+        # Log other scalars, skipping time/dt to avoid duplication
         for name, val in scalars.items():
-            # [CRITICAL FIX] Prevent double logging of time/dt
             if name in ["time", "dt"]:
                 continue
             self.log_scalar(name, val)
