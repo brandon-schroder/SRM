@@ -12,6 +12,11 @@ METRICS = {
     },
     "fields": {
         "mach": {"unit": ""}
+    },
+    "residuals": {
+        "res_rho": {"unit": "kg/m^3/s"},
+        "res_mom": {"unit": "Pa/m"},
+        "res_E":   {"unit": "Pa/s"}
     }
 }
 
