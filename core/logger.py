@@ -2,230 +2,136 @@ import h5py
 import numpy as np
 import subprocess
 import os
+from collections import defaultdict
+
 
 class HDF5Logger:
-    def __init__(self, filename, scalar_names, field_names, field_shape, buffer_size=100, units=None):
+    def __init__(self, filename, config=None, units=None, buffer_size=100, dtype=np.float32):
         self.filename = filename
-        self.scalar_names = scalar_names
-        self.field_names = field_names
-        self.field_shape = field_shape
+        self.buffer = defaultdict(list)
         self.buffer_size = buffer_size
         self.units = units or {}
+        self.default_dtype = dtype  # [Opt] Force float32 to save 50% disk space
 
-        # In-memory buffers
-        self.scalar_buffer = {name: [] for name in scalar_names}
-        self.field_buffer = {name: [] for name in field_names}
-        self.buffer_count = 0
+        # [Opt] libver='latest' enables performance features like SWMR
+        with h5py.File(self.filename, "w", libver='latest') as f:
+            f.create_group("timeseries")
+            f.create_group("fields")
+            if config:
+                self._save_config(f, config)
 
-        # Initialize file (truncate if exists)
-        with h5py.File(self.filename, "w") as f:
-            g_scalars = f.create_group("timeseries")
-            g_fields = f.create_group("fields")
-
-            for name in scalar_names:
-                unit = self.units.get(name, "")
-                self._create_dataset_with_units(g_scalars, name, (0,), (None,), unit)
-
-            max_shape = (None,) + field_shape
-            chunk_shape = (1,) + field_shape
-            for name in field_names:
-                unit = self.units.get(name, "")
-                # [Standard] Enable compression for field data
-                self._create_dataset_with_units(
-                    g_fields, name, (0,) + field_shape, max_shape, unit,
-                    chunks=chunk_shape, compression="gzip"
-                )
-
-    def _create_dataset_with_units(self, group, name, shape, maxshape, unit, chunks=None, compression=None):
-        # [Standard] Added compression argument
-        dset = group.create_dataset(
-            name, shape=shape, maxshape=maxshape,
-            dtype='float32', chunks=chunks, compression=compression
-        )
-        if unit:
-            dset.attrs["units"] = unit
-        return dset
-
-    def save_config(self, config_obj):
-        with h5py.File(self.filename, "a") as f:
-            # [Standard] Save Git Hash for reproducibility
-            try:
-                repo_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL).strip().decode('utf-8')
-                f.attrs['git_commit'] = repo_hash
-            except:
-                f.attrs['git_commit'] = "unknown"
-
-            for key, val in vars(config_obj).items():
-                if isinstance(val, (int, float, str, bool)):
-                    f.attrs[key] = val
-                elif isinstance(val, list):
-                    f.attrs[key] = str(val)
-
-    def save_summary(self, summary_dict):
-        with h5py.File(self.filename, "a") as f:
-            for key, val in summary_dict.items():
-                f.attrs[key] = val
-
-    def log_scalar(self, name, value):
-        if name in self.scalar_buffer:
-            self.scalar_buffer[name].append(value)
-
-    def log_field(self, name, value):
-        if name in self.field_buffer:
-            self.field_buffer[name].append(value)
-
-    def check_buffer(self):
-        self.buffer_count += 1
-        if self.buffer_count >= self.buffer_size:
+    def log(self, name, value):
+        self.buffer[name].append(value)
+        # Check size of the list, not the name string
+        if len(self.buffer[name]) >= self.buffer_size:
             self.flush()
 
     def flush(self):
-        if self.buffer_count == 0:
-            return
+        if not self.buffer: return
 
-        with h5py.File(self.filename, "a") as f:
-            g_scalars = f["timeseries"]
-            for name in self.scalar_names:
-                data = self.scalar_buffer[name]
-                if not data: continue
-                dset = g_scalars[name]
-                n_current = dset.shape[0]
-                dset.resize(n_current + len(data), axis=0)
-                dset[n_current:] = data
-                self.scalar_buffer[name] = []
+        # [Safety] Use append mode
+        with h5py.File(self.filename, "a", libver='latest') as f:
+            for name, values in self.buffer.items():
+                if not values: continue
 
-            g_fields = f["fields"]
-            for name in self.field_names:
-                data = self.field_buffer[name]
-                if not data: continue
-                dset = g_fields[name]
-                n_current = dset.shape[0]
-                dset.resize(n_current + len(data), axis=0)
-                dset[n_current:] = np.array(data)
-                self.field_buffer[name] = []
+                # Convert and Cast
+                data = np.array(values, dtype=self.default_dtype)
 
-        self.buffer_count = 0
+                # Auto-Classify
+                group_name = "timeseries" if data.ndim == 1 else "fields"
+                group = f[group_name]
+
+                # Lazy Create
+                if name not in group:
+                    base_shape = data.shape[1:]
+                    max_shape = (None,) + base_shape
+
+                    dset = group.create_dataset(
+                        name, shape=(0,) + base_shape, maxshape=max_shape,
+                        dtype=self.default_dtype, compression="gzip", chunks=True
+                    )
+                    if name in self.units:
+                        dset.attrs["units"] = self.units[name]
+
+                # Append
+                dset = group[name]
+                n_curr = dset.shape[0]
+                dset.resize(n_curr + len(values), axis=0)
+                dset[n_curr:] = data
+
+        self.buffer.clear()
+
+    def _save_config(self, f, config_obj):
+        try:
+            h = subprocess.check_output(['git', 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL)
+            f.attrs['git_commit'] = h.strip().decode('utf-8')
+        except:
+            f.attrs['git_commit'] = "unknown"
+
+        for k, v in vars(config_obj).items():
+            if isinstance(v, (int, float, str, bool, list)):
+                f.attrs[k] = str(v) if isinstance(v, list) else v
 
     def finalize(self):
         self.flush()
 
+    # --- [Safety] Context Manager Support ---
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Flushes data even if the simulation crashes
+        self.finalize()
+
 
 class SimulationRecorder(HDF5Logger):
-    """
-    A generic recorder that configures itself via dictionaries and callbacks.
-    Compatible with any solver that exposes a 'state' object.
-    """
-
-    def __init__(self, solver, state_map, metrics_def=None,
-                 geometry_callback=None, summary_callback=None,
-                 buffer_size=100_000):
-
+    def __init__(self, solver, state_map, metrics_def=None, geometry_callback=None, summary_callback=None):
         self.solver = solver
-        self.cfg = getattr(solver, 'cfg', None)
-        self.step_count = 0
-
-        # Configuration
         self.state_map = state_map
-        self.metrics_def = metrics_def or {"scalars": {}, "fields": {}}
-        self.geometry_callback = geometry_callback
+        self.metrics_def = metrics_def or {}
         self.summary_callback = summary_callback
 
-        # 1. Gather Names
-        pp_scalars = list(self.metrics_def.get("scalars", {}).keys())
-        pp_fields = list(self.metrics_def.get("fields", {}).keys())
-        state_vars = list(self.state_map.keys())
-
-        # Ensure 'time' and 'dt' are always present
-        all_scalars = sorted(list(set(["time", "dt"] + pp_scalars)))
-        all_fields = state_vars + pp_fields
-
-        # 2. Gather Units
-        units = {"time": "s", "dt": "s"}
-
-        # A. Units from Metrics
+        # Collect units
+        units = {k: v.get("unit", "") for k, v in self.state_map.items()}
         for cat in self.metrics_def.values():
-            for name, meta in cat.items():
-                units[name] = meta.get("unit", "")
-
-        # B. Units from State Map
-        for name, meta in self.state_map.items():
-            units[name] = meta.get("unit", "")
-
-        # 3. Determine Field Shape (Dynamic Inference)
-        # [Refactor] Decoupled from grid.n_cells. Infers shape from the first state variable.
-        if self.state_map:
-            first_field_info = next(iter(self.state_map.values()))
-            first_attr = first_field_info["attr"]
-            if hasattr(self.solver.state, first_attr):
-                sample_field = getattr(self.solver.state, first_attr)
-                field_shape = sample_field.shape
-            else:
-                field_shape = (1,) # Fallback
-        else:
-            field_shape = (1,)
+            for k, v in cat.items(): units[k] = v.get("unit", "")
+        units.update({"time": "s", "dt": "s"})
 
         super().__init__(
-            filename=self.cfg.output_filename if self.cfg else "output.h5",
-            scalar_names=all_scalars,
-            field_names=all_fields,
-            field_shape=field_shape,
-            buffer_size=buffer_size,
-            units=units
+            filename=getattr(solver.cfg, 'output_filename', 'output.h5'),
+            config=getattr(solver, 'cfg', None),
+            units=units,
+            dtype=getattr(solver.cfg, 'dtype', np.float32)  # Inherit solver precision
         )
 
-        # 4. Save Static Geometry & Config
-        if self.geometry_callback:
-            self.geometry_callback(self.filename, self.solver)
-
-        if self.cfg:
-            self.save_config(self.cfg)
+        if geometry_callback:
+            geometry_callback(self.filename, solver)
 
     def save(self):
-        # Interval check
-        interval = getattr(self.cfg, 'log_interval', 1)
-        if self.step_count % interval != 0:
-            self.step_count += 1
-            return
+        # 1. Log Time & DT
+        self.log("time", self.solver.state.t)
+        self.log("dt", self.solver.dt)
 
-        # 1. Get Derived Data
-        derived = {}
+        # 2. Log State Fields
+        for name, meta in self.state_map.items():
+            val = getattr(self.solver.state, meta["attr"], None)
+            if val is not None:
+                self.log(name, val)
+
+        # 3. Log Metrics
         if hasattr(self.solver, "get_derived_quantities"):
             derived = self.solver.get_derived_quantities()
-
-        scalars = derived.get("scalars", {})
-        derived_fields = derived.get("fields", {})
-
-        # 2. Log Scalars
-        # [Refactor] Explicitly log time/dt first
-        if hasattr(self.solver.state, "t"):
-            self.log_scalar("time", self.solver.state.t)
-        if hasattr(self.solver, "dt"):
-            self.log_scalar("dt", self.solver.dt)
-
-        # Log other scalars, skipping time/dt to avoid duplication
-        for name, val in scalars.items():
-            if name in ["time", "dt"]:
-                continue
-            self.log_scalar(name, val)
-
-        # 3. Log Raw State Fields
-        for name, meta in self.state_map.items():
-            attr_name = meta["attr"]
-            val = getattr(self.solver.state, attr_name, None)
-            if val is not None:
-                self.log_field(name, val)
-
-        # 4. Log Derived Fields
-        for name, val in derived_fields.items():
-            self.log_field(name, val)
-
-        self.check_buffer()
-        self.step_count += 1
+            for cat in derived.values():
+                for name, val in cat.items():
+                    if name not in ["time", "dt"]:
+                        self.log(name, val)
 
     def finalize(self):
         super().finalize()
-
-        # Summary Stats
         if self.summary_callback:
-            summary_data = self.summary_callback(self.filename)
-            self.save_summary(summary_data)
+            try:
+                stats = self.summary_callback(self.filename)
+                with h5py.File(self.filename, "a") as f:
+                    for k, v in stats.items(): f.attrs[k] = v
+            except Exception as e:
+                print(f"Warning: Failed to write summary stats: {e}")
