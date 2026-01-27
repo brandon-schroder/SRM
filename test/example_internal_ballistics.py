@@ -83,7 +83,7 @@ def main():
 
                 # Monitor progress
                 step_count = int(solver.state.t / (dt + 1e-16))
-                if step_count % 1000 == 0:
+                if step_count % 50 == 0:
                     max_p = np.max(solver.state.p) / 1e6
                     print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa")
 
@@ -135,18 +135,18 @@ def main():
     fig1, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
     # Plot 1: Pressure
-    ax[0].plot(solver.grid.x_coords, p_final / 1e5, 'r-', linewidth=2)
+    ax[0].plot(solver.grid.cart_coords[2], p_final / 1e5, 'r-', linewidth=2)
     ax[0].set_ylabel(f'Pressure [bar]')
     ax[0].set_title(f'Internal Ballistics State at t={solver.state.t:.4f}s')
     ax[0].grid(True, alpha=0.3)
 
     # Plot 2: Velocity
-    ax[1].plot(solver.grid.x_coords, u_final, 'b-', label='Velocity')
+    ax[1].plot(solver.grid.cart_coords[2], u_final, 'b-', label='Velocity')
     ax[1].set_ylabel('Velocity [m/s]')
     ax[1].grid(True, alpha=0.3)
 
     # Plot 3: Mach
-    ax[2].plot(solver.grid.x_coords, mach_final, 'k--', label='Mach')
+    ax[2].plot(solver.grid.cart_coords[2], mach_final, 'k--', label='Mach')
     ax[2].set_ylabel('Mach Number')
     ax[2].set_xlabel('Position [m]')
     ax[2].grid(True, alpha=0.3)

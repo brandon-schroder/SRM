@@ -18,7 +18,7 @@ class IBSolver:
     def __init__(self, config: SimulationConfig):
         self.cfg = config
         self.grid = Grid1D(config)
-        self.state = FlowState(n_cells=self.grid.dims[0], dtype=self.cfg.dtype)
+        self.state = FlowState(n_cells=self.grid.dims[2], dtype=self.cfg.dtype)
         self.dt = 0.0
 
         # --- Internalized Recorder ---
@@ -35,7 +35,7 @@ class IBSolver:
             summary_callback=compute_summary_stats
         )
 
-    def set_geometry(self, x: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
+    def set_geometry(self, z: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
                      A_propellant: np.ndarray, A_casing: np.ndarray):
         """
         Interpolates external geometry onto the grid.
@@ -43,12 +43,15 @@ class IBSolver:
         ng = self.grid.ng
         target_dtype = self.cfg.dtype
 
-        self.state.A = np.interp(self.grid.x_coords, x, A).astype(target_dtype)
-        self.state.P = np.interp(self.grid.x_coords, x, P).astype(target_dtype)
-        self.state.P_wetted = np.interp(self.grid.x_coords, x, P_wetted).astype(target_dtype)
+        # Use cart_coords[2] (Z-axis) for interpolation
+        z_grid = self.grid.cart_coords[2]
 
-        self.state.A_propellant = np.interp(self.grid.x_coords, x, A_propellant).astype(target_dtype)
-        self.state.A_casing = np.interp(self.grid.x_coords, x, A_casing).astype(target_dtype)
+        self.state.A = np.interp(z_grid, z, A).astype(target_dtype)
+        self.state.P = np.interp(z_grid, z, P).astype(target_dtype)
+        self.state.P_wetted = np.interp(z_grid, z, P_wetted).astype(target_dtype)
+
+        self.state.A_propellant = np.interp(z_grid, z, A_propellant).astype(target_dtype)
+        self.state.A_casing = np.interp(z_grid, z, A_casing).astype(target_dtype)
 
         # Assign values to ghost cells
         geom_arrays = [self.state.A, self.state.P, self.state.P_wetted, self.state.A_propellant, self.state.A_casing]
@@ -56,8 +59,9 @@ class IBSolver:
             arr[:ng] = arr[ng]
             arr[-ng:] = arr[-ng - 1]
 
-        # Calculate gradients
-        self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * self.grid.dx)
+        # Calculate gradients using grid.dx[2] (Axial spacing)
+        dz = self.grid.dx[2]
+        self.state.dAdz[1:-1] = (self.state.A[2:] - self.state.A[:-2]) / (2 * dz)
         self.state.dAdz[0] = self.state.dAdz[1]
         self.state.dAdz[-1] = self.state.dAdz[-2]
 
@@ -104,12 +108,15 @@ class IBSolver:
             self.state.P[self.grid.interior], self.state.dAdz[self.grid.interior]
         )
 
-        dFdx = (F_hat[:, 1:] - F_hat[:, :-1]) / self.grid.dx
-        return S - dFdx
+        # Compute flux gradient using grid.dx[2]
+        dFdz = (F_hat[:, 1:] - F_hat[:, :-1]) / self.grid.dx[2]
+        return S - dFdz
 
     def step(self) -> Tuple[float, float]:
+        # Pass grid.dx[2] (scalar) to adaptive_timestep
         self.dt = adaptive_timestep(
-            self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma, self.grid.dx, self.grid.ng,
+            self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma,
+            self.grid.dx[2], self.grid.ng,
             self.state.t, self.cfg.t_end)
 
         U_int = self.state.U[:, self.grid.interior]
@@ -136,7 +143,7 @@ class IBSolver:
     def get_dataframe(self) -> pd.DataFrame:
         sl = self.grid.interior
         return pd.DataFrame({
-            "x": self.grid.x_coords[sl],
+            "z": self.grid.cart_coords[2][sl],  # Return Z as primary axis
             "rho": self.state.rho[sl],
             "u": self.state.u[sl],
             "p": self.state.p[sl],
