@@ -82,20 +82,15 @@ class IBSolver:
         # Ensure burn rate calculation handles low pressure safely
         self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
 
-        alpha = np.abs(self.state.u) + self.state.c
-        alpha = np.nan_to_num(alpha, nan=1000.0)
-
         F_hat = compute_numerical_flux_jit(
             U_full, self.state.A, self.state.rho, self.state.u,
-            self.state.p, alpha, self.cfg.ng
+            self.state.p, self.state.c, self.cfg.ng
         )
 
-        # WELL-BALANCED FIX:
         # Calculate areas at cell interfaces by averaging neighbor cells
         # Interfaces [i] are between cell [i-1] and [i]
-        A_full = self.state.A
-        A_interfaces = 0.5 * (A_full[self.grid.ng - 1: -self.grid.ng] +
-                              A_full[self.grid.ng: -self.grid.ng + 1])
+        A_interfaces = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
+                              self.state.A[self.grid.ng: -self.grid.ng + 1])
 
         S = source_jit(
             self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior],
