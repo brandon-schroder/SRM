@@ -61,9 +61,8 @@ class IBSolver:
         self.state.u[:] = self.cfg.u_initial
         self.state.br[:] = self.cfg.br_initial  # simplified initialization
 
-        self.state.U[:] = primitive_to_conserved(
-            self.state.rho, self.state.u, self.state.p, self.state.A, self.cfg.gamma
-        )
+        self.state.U[:] = primitives_to_conserved(self.state.rho, self.state.u, self.state.p, self.state.A,
+                                                  self.cfg.gamma)
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
         self.recorder.save()
 
@@ -71,32 +70,25 @@ class IBSolver:
         U_full = self.state.U
         U_full[:, self.grid.interior] = U_interior
 
+        A_interfaces = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
+                              self.state.A[self.grid.ng: -self.grid.ng + 1])
+
         U_full = apply_boundary_jit(
             U_full, self.state.A, self.cfg.gamma, self.cfg.R,
             self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng
         )
 
         self.state.rho, self.state.u, self.state.p, self.state.c = \
-            compute_primitives_jit(U_full, self.state.A, self.cfg.gamma)
+            conserved_to_primitives(U_full, self.state.A, self.cfg.gamma)
 
         # Ensure burn rate calculation handles low pressure safely
         self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
 
-        F_hat = compute_numerical_flux_jit(
-            U_full, self.state.A, self.state.rho, self.state.u,
-            self.state.p, self.state.c, self.cfg.ng
-        )
+        F_hat = compute_numerical_flux(U_full, A_interfaces, self.state.rho, self.state.u, self.state.p, self.state.c,
+                                       self.cfg.gamma, self.cfg.ng)
 
-        # Calculate areas at cell interfaces by averaging neighbor cells
-        # Interfaces [i] are between cell [i-1] and [i]
-        A_interfaces = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
-                              self.state.A[self.grid.ng: -self.grid.ng + 1])
-
-        S = source_jit(
-            self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior],
-            self.cfg.R, self.cfg.gamma, self.state.p[self.grid.interior],
-            self.state.P[self.grid.interior], A_interfaces, self.grid.dx[2]
-        )
+        S = source(self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior], self.cfg.R, self.cfg.gamma,
+                   self.state.p[self.grid.interior], self.state.P[self.grid.interior], A_interfaces, self.grid.dx[2])
 
         dFdz = (F_hat[:, 1:] - F_hat[:, :-1]) / self.grid.dx[2]
         return S - dFdz

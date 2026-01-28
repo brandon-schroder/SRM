@@ -70,8 +70,6 @@ def main():
     solver.set_geometry(z_geom, A_geom, P_geom, P_wetted, A_propellant, A_casing)
     solver.initialize()
 
-    print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")
-
     # ---------------------------------------------------------
     # 3. Main Loop
     # ---------------------------------------------------------
@@ -99,6 +97,8 @@ def main():
     # 4. Post-Processing
     # ---------------------------------------------------------
     print(f"\nSimulation Complete (t = {solver.state.t:.4f} s)")
+
+    print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")
 
     if not os.path.exists(config.output_filename):
         print("Error: Output file not found.")
