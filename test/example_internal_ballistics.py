@@ -83,9 +83,14 @@ def main():
                 step_count = int(solver.state.t / (dt + 1e-16))
                 if step_count % 1000 == 0:
                     max_p = np.max(solver.state.p) / 1e6
+
                     # Monitor Residuals during run
                     res_rho = solver.residuals.get("res_rho", 0.0)
-                    print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa | Res(rho)={res_rho:.2e}")
+                    res_mom = solver.residuals.get("res_mom", 0.0)
+                    res_E = solver.residuals.get("res_E", 0.0)
+
+                    print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa | "
+                          f"Res(rho)={res_rho:.2e}| Res(mom)={res_mom:.2e}| Res(E)={res_E:.2e}")
 
         except KeyboardInterrupt:
             print("\nSimulation interrupted by user. Saving data...")
