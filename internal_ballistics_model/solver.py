@@ -101,7 +101,7 @@ class IBSolver:
         U_int_old = self.state.U[:, self.grid.interior].copy()
         U_int_new = ssp_rk_3_3(U_int_old, self.dt, self._compute_rhs)
 
-        if self.dt > 1e-16:
+        if self.dt > 1e-16: # RMS Residuals for the mass, momentum and energy equations
             rate_of_change = (U_int_new - U_int_old) / self.dt
             self.residuals["res_rho"] = np.sqrt(np.mean(rate_of_change[0] ** 2))
             self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
@@ -117,7 +117,11 @@ class IBSolver:
         data = compute_metrics(self.state, self.grid, self.cfg)
         data["scalars"]["time"] = self.state.t
         data["scalars"]["dt"] = self.dt
-        data["residuals"] = self.residuals
+
+        # 3. Inject Residuals (Calculated in step())
+        data["scalars"]["res_rho"] = self.residuals["res_rho"]
+        data["scalars"]["res_mom"] = self.residuals["res_mom"]
+        data["scalars"]["res_E"] = self.residuals["res_E"]
         return data
 
     def finalize(self):

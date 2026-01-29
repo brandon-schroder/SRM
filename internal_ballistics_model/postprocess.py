@@ -9,15 +9,14 @@ METRICS = {
         "thrust": {"unit": "N"},
         "isp": {"unit": "s"},
         "mass_flow": {"unit": "kg/s"},
+
+        "res_rho": {"unit": "kg/m^3/s"},
+        "res_mom": {"unit": "Pa/m"},
+        "res_E":   {"unit": "Pa/s"}
     },
     "fields": {
         "mach": {"unit": ""}
     },
-    "residuals": {
-        "res_rho": {"unit": "kg/m^3/s"},
-        "res_mom": {"unit": "Pa/m"},
-        "res_E":   {"unit": "Pa/s"}
-    }
 }
 
 
