@@ -20,8 +20,8 @@ class SimulationConfig:
     t0_inlet: float = 288.15
     p0_inlet: float = 100.0e3
     br_initial: float = 1E-6
-    inlet_bc_type: str = "reflective"  # Options: "reflective", "characteristic"
-    outlet_bc_type: str = "characteristic"  # Options: "characteristic"
+    inlet_bc_type: str = "reflective"  # Options: "reflective", "characteristic", "transmissive"
+    outlet_bc_type: str = "characteristic"  # Options: "reflective", "characteristic", "transmissive"
 
     # Properties
     R: float = 287.0

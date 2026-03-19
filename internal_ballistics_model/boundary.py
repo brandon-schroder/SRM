@@ -181,13 +181,61 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
     return U
 
 
+@njit
+def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
+    """
+    Applies a reflective (solid wall) boundary condition at the outlet.
+    Density and energy are symmetric (mirrored).
+    Momentum is anti-symmetric (mirrored and negated) to enforce u = 0 at the wall.
+    """
+    # Mirror the interior cells into the ghost cells
+    for i in range(ng):
+        ghost_idx = -ng + i
+        interior_idx = -ng - 1 - i
+
+        U[0, ghost_idx] = U[0, interior_idx]  # Mass (symmetric)
+        U[1, ghost_idx] = -U[1, interior_idx]  # Momentum (anti-symmetric)
+        U[2, ghost_idx] = U[2, interior_idx]  # Energy (symmetric)
+
+    return U
+
+@njit(fastmath=True, cache=True)
+def boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
+    """
+    Applies a zero-gradient (transmissive) boundary condition at the inlet.
+    Copies the values from the first interior cell into the left ghost cells.
+    """
+
+    for i in range(ng):
+        U[0, i] = U[0, ng]
+        U[1, i] = U[1, ng]
+        U[2, i] = U[2, ng]
+    return U
+
+@njit(fastmath=True, cache=True)
+def boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
+    """
+    Applies a zero-gradient (transmissive) boundary condition at the outlet.
+    Copies the values from the last interior cell into the right ghost cells.
+    """
+
+    for i in range(ng):
+        U[0, -1 - i] = U[0, -ng - 1]
+        U[1, -1 - i] = U[1, -ng - 1]
+        U[2, -1 - i] = U[2, -ng - 1]
+    return U
+
+
 
 # ==============================================================
 
 # Define integer constants for Numba routing
 INLET_REFLECTIVE = 0
 INLET_CHARACTERISTIC = 1
-OUTLET_CHARACTERISTIC = 0
+INLET_TRANSMISSIVE = 2
+OUTLET_REFLECTIVE = 0
+OUTLET_CHARACTERISTIC = 1
+OUTLET_TRANSMISSIVE = 2
 
 @njit(fastmath=True, cache=True)
 def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng, inlet_type, outlet_type):
@@ -198,10 +246,16 @@ def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng, inlet_type, outlet_typ
         U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
     elif inlet_type == INLET_CHARACTERISTIC:
         U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+    elif inlet_type == INLET_TRANSMISSIVE:
+        U = boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
 
     # Route Outlet Boundary Condition
-    if outlet_type == OUTLET_CHARACTERISTIC:
+    if outlet_type == OUTLET_REFLECTIVE:
+        U = boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+    elif outlet_type == OUTLET_CHARACTERISTIC:
         U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+    elif outlet_type == OUTLET_TRANSMISSIVE:
+        U = boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
 
     return U
 
