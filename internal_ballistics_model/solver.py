@@ -21,8 +21,19 @@ class IBSolver:
         self.dt = 0.0
 
         # Map string config to integer flags for Numba
-        self.inlet_bc_flag = 0 if self.cfg.inlet_bc_type == "reflective" else 1
-        self.outlet_bc_flag = 0
+        if self.cfg.inlet_bc_type == "reflective":
+            self.inlet_bc_flag = 0
+        elif self.cfg.inlet_bc_type == "characteristic":
+            self.inlet_bc_flag = 1
+        elif self.cfg.inlet_bc_type == "reflective":
+            self.inlet_bc_flag = 2
+
+        if self.cfg.outlet_bc_type == "reflective":
+            self.outlet_bc_flag = 0
+        elif self.cfg.outlet_bc_type == "characteristic":
+            self.outlet_bc_flag = 1
+        elif self.cfg.outlet_bc_type == "reflective":
+            self.outlet_bc_flag = 2
 
         self.residuals = {"res_rho": 0.0, "res_mom": 0.0, "res_E": 0.0}
 
