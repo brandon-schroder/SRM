@@ -184,13 +184,24 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 
 # ==============================================================
 
-@njit(fastmath=True, cache=True)
-def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng):
-    """Apply characteristic-based boundary conditions."""
+# Define integer constants for Numba routing
+INLET_REFLECTIVE = 0
+INLET_CHARACTERISTIC = 1
+OUTLET_CHARACTERISTIC = 0
 
-    U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
-    # U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
-    U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+@njit(fastmath=True, cache=True)
+def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng, inlet_type, outlet_type):
+    """Apply characteristic-based boundary conditions dynamically."""
+
+    # Route Inlet Boundary Condition
+    if inlet_type == INLET_REFLECTIVE:
+        U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+    elif inlet_type == INLET_CHARACTERISTIC:
+        U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+
+    # Route Outlet Boundary Condition
+    if outlet_type == OUTLET_CHARACTERISTIC:
+        U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
 
     return U
 

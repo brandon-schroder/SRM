@@ -58,7 +58,7 @@ def main():
 
     # Output settings
     config.output_filename = "output_ib.h5"
-    config.log_interval = 1
+    config.log_interval = 100
     config.dtype = precision
 
     print(f"--- Initializing Simulation: {config.n_cells} cells ---")

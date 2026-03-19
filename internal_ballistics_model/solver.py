@@ -17,9 +17,12 @@ class IBSolver:
     def __init__(self, config: SimulationConfig):
         self.cfg = config
         self.grid = Grid1D(config)
-        # Using index 2 to match your Z-axial axial consistency
         self.state = FlowState(n_cells=self.grid.dims[2], dtype=self.cfg.dtype)
         self.dt = 0.0
+
+        # Map string config to integer flags for Numba
+        self.inlet_bc_flag = 0 if self.cfg.inlet_bc_type == "reflective" else 1
+        self.outlet_bc_flag = 0
 
         self.residuals = {"res_rho": 0.0, "res_mom": 0.0, "res_E": 0.0}
 
@@ -75,7 +78,8 @@ class IBSolver:
 
         U_full = apply_boundary_jit(
             U_full, self.state.A, self.cfg.gamma, self.cfg.R,
-            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng
+            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng,
+            self.inlet_bc_flag, self.outlet_bc_flag
         )
 
         self.state.rho, self.state.u, self.state.p, self.state.c = \

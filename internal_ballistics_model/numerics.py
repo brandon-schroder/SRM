@@ -245,12 +245,6 @@ def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
 
     rho, u, p, c = conserved_to_primitives(U, A, gamma)
 
-    # rho = U[0, ng:-ng] / A[ng:-ng]
-    # u = U[1, ng:-ng] / (U[0, ng:-ng] + eps)
-    # p = (U[2, ng:-ng] / A[ng:-ng] - 0.5 * rho * u ** 2) * (gamma - 1)
-    # p = np.maximum(p, 1e-5)
-    # c = np.sqrt(gamma * p / rho)
-
     smax = np.max(np.abs(u) + c)
     dt_stable = CFL * dz / (smax + eps)
 

@@ -18,8 +18,10 @@ class SimulationConfig:
     t_initial: float = 288.15
     p_inf: float = 100.0E3
     t0_inlet: float = 288.15
-    p0_inlet: float = 150.0e3
+    p0_inlet: float = 100.0e3
     br_initial: float = 1E-6
+    inlet_bc_type: str = "reflective"  # Options: "reflective", "characteristic"
+    outlet_bc_type: str = "characteristic"  # Options: "characteristic"
 
     # Properties
     R: float = 287.0
@@ -41,7 +43,7 @@ class SimulationConfig:
     erosive_gth: float = 35.0
 
     output_filename: str = "internal_ballistics.h5"
-    log_interval: int = 1
+    log_interval: int = 10
     dtype: np.dtype = np.float64
 
 
