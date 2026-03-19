@@ -9,9 +9,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from internal_ballistics_model import SimulationConfig, IBSolver
 from internal_ballistics_model.numerics import primitives_to_conserved
 
+try:
+    import sodshock
+except ImportError:
+    print("[ERROR] The 'sodshock' package is not installed.")
+    print("Please install it by running: pip install sodshock")
+    sys.exit(1)
+
 
 def main():
-    precision = np.float32
+    precision = np.float64
 
     # 1. Geometry Setup (Constant Area Tube)
     # ---------------------------------------------------------
@@ -33,8 +40,8 @@ def main():
         gamma=1.4,
         br_initial=0.0,  # Disable source terms
         a_coef=0.0,
-        inlet_bc_type= "characteristic"  # Options: "reflective", "characteristic"
-
+        inlet_bc_type="transmissive",  # Transmissive boundary
+        outlet_bc_type="transmissive"  # Transmissive boundary
     )
 
     config.output_filename = "output_sod.h5"
@@ -101,25 +108,52 @@ def main():
         print(f"\n[ERROR] Simulation crashed: {e}")
         raise
 
-    # 6. Plotting
+    # 6. Analytical Solution & Plotting
     # ---------------------------------------------------------
-    z = solver.grid.cart_coords[2][interior]
-    rho = solver.state.rho[interior]
-    p = solver.state.p[interior]
-    u = solver.state.u[interior]
+    print("Computing exact analytical solution...")
 
-    fig, axs = plt.subplots(3, 1, figsize=(8, 8), sharex=True)
+    # sodshock takes states in the order: (pressure, density, velocity)
+    left_state = (1.0, 1.0, 0.0)
+    right_state = (0.1, 0.125, 0.0)
 
-    axs[0].plot(z, rho, 'k-', lw=1.5)
+    # Calculate exact solution
+    positions, regions, values = sodshock.solve(
+        left_state=left_state,
+        right_state=right_state,
+        geometry=(0.0, 1.0, 0.5),
+        t=config.t_end,
+        gamma=config.gamma,
+        npts=500  # High resolution for the analytical line
+    )
+
+    z_exact = values['x']
+    rho_exact = values['rho']
+    u_exact = values['u']
+    p_exact = values['p']
+
+    # Extract numerical results
+    z_num = solver.grid.cart_coords[2][interior]
+    rho_num = solver.state.rho[interior]
+    p_num = solver.state.p[interior]
+    u_num = solver.state.u[interior]
+
+    # Plotting Comparison
+    fig, axs = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
+
+    axs[0].plot(z_exact, rho_exact, 'k-', linewidth=1.5, label='Exact Analytical')
+    axs[0].plot(z_num, rho_num, 'ro', markersize=2, label='Numerical (IBSolver)')
     axs[0].set_ylabel('Density')
     axs[0].grid(True, alpha=0.3)
-    axs[0].set_title(f"Sod Shock Tube at t={solver.state.t:.3f}")
+    axs[0].legend()
+    axs[0].set_title(f"Sod Shock Tube Validation at t={solver.state.t:.3f}s")
 
-    axs[1].plot(z, u, 'b-', lw=1.5)
+    axs[1].plot(z_exact, u_exact, 'k-', linewidth=1.5)
+    axs[1].plot(z_num, u_num, 'go', markersize=2)
     axs[1].set_ylabel('Velocity')
     axs[1].grid(True, alpha=0.3)
 
-    axs[2].plot(z, p, 'r-', lw=1.5)
+    axs[2].plot(z_exact, p_exact, 'k-', linewidth=1.5)
+    axs[2].plot(z_num, p_num, 'bo', markersize=2)
     axs[2].set_ylabel('Pressure')
     axs[2].set_xlabel('Position (z)')
     axs[2].grid(True, alpha=0.3)
