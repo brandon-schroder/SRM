@@ -25,14 +25,14 @@ class IBSolver:
             self.inlet_bc_flag = 0
         elif self.cfg.inlet_bc_type == "characteristic":
             self.inlet_bc_flag = 1
-        elif self.cfg.inlet_bc_type == "reflective":
+        elif self.cfg.inlet_bc_type == "transmissive":
             self.inlet_bc_flag = 2
 
         if self.cfg.outlet_bc_type == "reflective":
             self.outlet_bc_flag = 0
         elif self.cfg.outlet_bc_type == "characteristic":
             self.outlet_bc_flag = 1
-        elif self.cfg.outlet_bc_type == "reflective":
+        elif self.cfg.outlet_bc_type == "transmissive":
             self.outlet_bc_flag = 2
 
         self.residuals = {"res_rho": 0.0, "res_mom": 0.0, "res_E": 0.0}
@@ -97,7 +97,7 @@ class IBSolver:
             conserved_to_primitives(U_full, self.state.A, self.cfg.gamma)
 
         # Ensure burn rate calculation handles low pressure safely
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model="none")
+        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model=self.cfg.erosive_model)
 
         F_hat = compute_numerical_flux(U_full, A_interfaces, self.state.rho, self.state.u, self.state.p, self.state.c,
                                        self.cfg.gamma, self.cfg.ng)

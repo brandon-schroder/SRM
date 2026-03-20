@@ -52,4 +52,7 @@ def burn_rate(config: SimulationConfig, state: FlowState, model="MP"):
 
     burn_rate = eta * base_burn_rate
 
+    if model=="override":
+        burn_rate = config.br_initial * np.ones_like(pressure)
+
     return burn_rate, eta

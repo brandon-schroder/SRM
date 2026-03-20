@@ -34,6 +34,7 @@ class SimulationConfig:
     # Base Burn Law (r = a * P^n)
     a_coef: float = 0.000035
     n_exp: float = 0.36
+    erosive_model: str = "none"
 
     # Erosive Constants (Mukunda-Paul)
     erosive_mu: float = 8.85E-5
