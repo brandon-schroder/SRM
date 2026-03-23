@@ -43,7 +43,7 @@ class LSSolver:
                 "P_wetted": {"attr": "P_wetted", "unit": "m"},
             },
             metrics_def=METRICS,
-            geometry_callback=save_3d_geometry,  # Callback from .grid
+            geometry_callback=save_3d_geometry,
             summary_callback=compute_summary_stats
         )
 
