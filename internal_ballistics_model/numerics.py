@@ -89,40 +89,6 @@ def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
     return S
 
 
-# @njit(fastmath=True, cache=True)
-# def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
-#     """Jiang-Shu Flux Vector Splitting (FVS) numerical flux computation """
-#
-#     num_comp, n_tot = U.shape
-#     nc = n_tot - 2 * ng
-#
-#     alpha = np.abs(u) + c
-#     alpha = np.nan_to_num(alpha, nan=1000.0)
-#
-#     # Compute physical flux using pre-computed primitives
-#     F = flux(U, A, rho, u, p)
-#
-#     # Lax-Friedrichs splitting
-#     fp = 0.5 * (F + alpha * U)
-#     fm = 0.5 * (F - alpha * U)
-#
-#     F_hat = np.zeros((num_comp, nc+1))
-#     for i in range(nc + 1):
-#         ii = i + ng - 1
-#
-#         # For each component
-#         for m in range(num_comp):
-#             # Left-biased reconstruction (f+)
-#             F_hat_p = weno_left(fp[m, ii - 2], fp[m, ii - 1], fp[m, ii], fp[m, ii + 1], fp[m, ii + 2], fp[m, ii + 3])
-#
-#             # Right-biased reconstruction (f-)
-#             F_hat_m = weno_right(fm[m, ii - 2], fm[m, ii - 1], fm[m, ii], fm[m, ii + 1], fm[m, ii + 2], fm[m, ii + 3])
-#
-#             F_hat[m, i] = F_hat_p + F_hat_m
-#
-#     return F_hat
-
-
 @njit(fastmath=True, cache=True)
 def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
     """
