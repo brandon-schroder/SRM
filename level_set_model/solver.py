@@ -61,7 +61,7 @@ class LSSolver:
 
         prop = pv.read(filename_prop).scale(self.cfg.file_scale)
         case = pv.read(filename_case).scale(self.cfg.file_scale)
-        prop = prop.clip_surface(case, invert=True)
+        # prop = prop.clip_surface(case, invert=True)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
         self.grid.pv_grid.point_data["casing"] = self.grid.pv_grid.point_data["implicit_distance"]
@@ -149,6 +149,8 @@ class LSSolver:
             self.vtk_times.append(self.state.t)
 
             self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
+            phi_bounded = np.maximum(self.state.phi, self.state.casing)
+            self.grid.pv_grid["propellant_bounded"] = phi_bounded.flatten(order='F')
             if hasattr(self.state, 'br'):
                 self.grid.pv_grid["burn_rate"] = self.state.br.flatten(order='F')
 
