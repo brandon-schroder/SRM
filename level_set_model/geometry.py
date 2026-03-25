@@ -192,67 +192,70 @@ def calc_surf_tet(nodes, phi_target, phi_filter):
 # PART 4: THE FUSED KERNEL (ZERO-COPY)
 # ==============================================================================
 
+# 1. New 3D Fused Kernel (Replaces compute_slice_fused)
 @njit(parallel=True, cache=True)
-def compute_slice_fused(k, nx, ny, Xg, Yg, Zg, phi_p, phi_c):
+def compute_geometry_3d_fused(nx, ny, nz, Xg, Yg, Zg, phi_p, phi_c):
     """
-    Fused Kernel: Gathers coords and integrates immediately.
-    Eliminates intermediate buffer allocation.
+    Computes geometry for the entire 3D domain in a single parallel call.
+    Parallelizes over the Z-axis (k) to eliminate thread pool overhead.
     """
-    # Accumulators
-    total_vol_casing = 0.0
-    total_vol_grain = 0.0
-    total_surf_grain = 0.0
-    total_surf_casing = 0.0
+    # Pre-allocate output arrays for the Z-slices
+    v_c_arr = np.empty(nz)
+    v_g_arr = np.empty(nz)
+    s_p_arr = np.empty(nz)
+    s_c_arr = np.empty(nz)
 
-    # Parallelize over 2D slice
-    for i in prange(nx):
-        for j in range(ny):
+    # Parallelize the OUTER loop
+    for k in prange(nz):
+        # Local accumulators for this specific Z-slice
+        slice_v_c = 0.0
+        slice_v_g = 0.0
+        slice_s_p = 0.0
+        slice_s_c = 0.0
 
-            # Local buffers (Registers/L1 Cache)
-            loc_nodes = np.zeros((4, 3), dtype=np.float64)
-            loc_p = np.zeros(4, dtype=np.float64)
-            loc_c = np.zeros(4, dtype=np.float64)
-            loc_eff = np.zeros(4, dtype=np.float64)  # Intersection phi
+        # Standard inner loops
+        for i in range(nx):
+            for j in range(ny):
+                loc_nodes = np.zeros((4, 3), dtype=np.float64)
+                loc_p = np.zeros(4, dtype=np.float64)
+                loc_c = np.zeros(4, dtype=np.float64)
+                loc_eff = np.zeros(4, dtype=np.float64)
 
-            # Process 6 Tethrahedra per cell
-            for t in range(6):
+                for t in range(6):
+                    for v in range(4):
+                        ii = i + TET_OFFSETS[t, v, 0]
+                        jj = j + TET_OFFSETS[t, v, 1]
+                        kk = k + TET_OFFSETS[t, v, 2]
 
-                # 1. Gather Data (Manual Unroll)
-                for v in range(4):
-                    ii = i + TET_OFFSETS[t, v, 0]
-                    jj = j + TET_OFFSETS[t, v, 1]
-                    kk = k + TET_OFFSETS[t, v, 2]
+                        loc_nodes[v, 0] = Xg[ii, jj, kk]
+                        loc_nodes[v, 1] = Yg[ii, jj, kk]
+                        loc_nodes[v, 2] = Zg[ii, jj, kk]
 
-                    loc_nodes[v, 0] = Xg[ii, jj, kk]
-                    loc_nodes[v, 1] = Yg[ii, jj, kk]
-                    loc_nodes[v, 2] = Zg[ii, jj, kk]
+                        loc_p[v] = phi_p[ii, jj, kk]
+                        loc_c[v] = phi_c[ii, jj, kk]
 
-                    loc_p[v] = phi_p[ii, jj, kk]
-                    loc_c[v] = phi_c[ii, jj, kk]
-                    # Calculate intersection phi on the fly
-                    val_p = loc_p[v]
-                    val_c = loc_c[v]
-                    loc_eff[v] = val_p if val_p < val_c else val_c
+                        val_p = loc_p[v]
+                        val_c = loc_c[v]
+                        loc_eff[v] = val_p if val_p < val_c else val_c
 
-                # 2. Integrate Metrics (Data already in cache)
-                total_vol_casing += calc_vol_tet(loc_nodes, loc_c)
-                total_vol_grain += calc_vol_tet(loc_nodes, loc_eff)
-                total_surf_grain += calc_surf_tet(loc_nodes, loc_p, loc_c)
-                total_surf_casing += calc_surf_tet(loc_nodes, loc_c, loc_p)
+                    slice_v_c += calc_vol_tet(loc_nodes, loc_c)
+                    slice_v_g += calc_vol_tet(loc_nodes, loc_eff)
+                    slice_s_p += calc_surf_tet(loc_nodes, loc_p, loc_c)
+                    slice_s_c += calc_surf_tet(loc_nodes, loc_c, loc_p)
 
-    return total_vol_casing, total_vol_grain, total_surf_grain, total_surf_casing
+        # Store results for this slice
+        v_c_arr[k] = slice_v_c
+        v_g_arr[k] = slice_v_g
+        s_p_arr[k] = slice_s_p
+        s_c_arr[k] = slice_s_c
 
+    return v_c_arr, v_g_arr, s_p_arr, s_c_arr
 
 # ==============================================================================
 # PART 5: MAIN DRIVER
 # ==============================================================================
 
 def compute_geometric_distributions(grid, state):
-    """
-    Computes geometric properties using the Fused Zero-Copy Kernel.
-    """
-    # 1. Prepare Data
-    # Make contiguous for SIMD speed
     phi_prop = np.ascontiguousarray(-state.phi)
     phi_case = np.ascontiguousarray(-state.casing)
 
@@ -260,62 +263,43 @@ def compute_geometric_distributions(grid, state):
     Yg = np.ascontiguousarray(grid.cart_coords[1])
     Zg = np.ascontiguousarray(grid.cart_coords[2])
 
-    # 2. Grid Dimensions
     shape = grid.cart_coords.shape
     nx_dual = shape[1] - 1
     ny_dual = shape[2] - 1
     nz_dual = shape[3] - 1
 
-    # Core Correction parameters
     r_min = grid.polar_coords[0, :].min()
     core_area_base = np.pi * (r_min ** 2)
     n_periodics = grid.n_periodics
 
-    # 3. Output Storage
-    perimeters = np.zeros(nz_dual)
-    hydraulic_perimeters = np.zeros(nz_dual)
-    flow_areas = np.zeros(nz_dual)
-    casing_areas = np.zeros(nz_dual)
-    propellant_areas = np.zeros(nz_dual)
-    z_coords = np.zeros(nz_dual)
+    # Single parallel call handles the entire grid
+    v_c_arr, v_g_arr, s_p_arr, s_c_arr = compute_geometry_3d_fused(
+        nx_dual, ny_dual, nz_dual,
+        Xg, Yg, Zg,
+        phi_prop, phi_case
+    )
 
+    # Vectorized post-processing
+    z_coords = Zg[0, 0, :-1]  # Get all z-coords at once
+    z_next = Zg[0, 0, 1:]
+    dz = z_next - z_coords
+    dz = np.where(dz == 0, 1.0, dz)  # Protect against division by zero
 
-    # 4. Main Loop (Python overhead minimal now)
-    for k in range(nz_dual):
+    casing_areas = v_c_arr / dz
+    grain_areas = v_g_arr / dz
+    perimeters_raw = s_p_arr / dz
+    casing_exposed = s_c_arr / dz
 
-        # Calculate dz for this slice (assuming planar-ish slice)
-        # Using Tet 0: bottom nodes at k, top node at k+1
-        # z_top = Zg[0, 0, k+1] vs z_bot = Zg[0, 0, k] (Indices from Tet 0 definition)
-        dz = Zg[0, 0, k + 1] - Zg[0, 0, k]
-        if dz == 0: dz = 1.0
+    flow_port_areas = casing_areas - grain_areas
 
-        # --- CALL FUSED KERNEL ---
-        v_c, v_g, s_p, s_c = compute_slice_fused(
-            k, nx_dual, ny_dual,
-            Xg, Yg, Zg,
-            phi_prop, phi_case
-        )
+    # Core correction logic using numpy vectorization
+    core_areas = np.full(nz_dual, core_area_base)
+    core_areas[casing_areas < 1e-9] = 0.0
 
-        # 5. Post-Process (Legacy Mapping)
-        # Convert Volumes to Areas
-        casing_area = v_c / dz
-        grain_area = v_g / dz
+    perimeters = perimeters_raw * n_periodics
+    hydraulic_perimeters = (perimeters_raw + casing_exposed) * n_periodics
+    casing_areas_final = casing_areas * n_periodics + core_areas
+    flow_areas = grain_areas * n_periodics + core_areas
+    propellant_areas = flow_port_areas * n_periodics
 
-        perimeter = s_p / dz
-        casing_exposed = s_c / dz
-
-        flow_port_area = casing_area - grain_area
-
-        # Core Correction
-        core_area = core_area_base
-        if casing_area < 1e-9: core_area = 0.0
-
-        # Store
-        z_coords[k] = Zg[0, 0, k]
-        perimeters[k] = perimeter * n_periodics
-        hydraulic_perimeters[k] = (perimeter + casing_exposed) * n_periodics
-        casing_areas[k] = casing_area * n_periodics + core_area
-        flow_areas[k] = grain_area * n_periodics + core_area
-        propellant_areas[k] = flow_port_area * n_periodics
-
-    return z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas
+    return z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas_final, propellant_areas

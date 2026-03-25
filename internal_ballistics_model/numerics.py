@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, prange
 
 from core.wenos import weno3_left as weno_left, weno3_right as weno_right
 
@@ -42,6 +42,7 @@ def primitives_to_conserved(rho, u, p, A, gamma):
     U[0, :] = rho * A
     U[1, :] = rho * u * A
     U[2, :] = (p / (gamma - 1) + 0.5 * rho * u ** 2) * A
+
     return U
 
 
@@ -52,10 +53,11 @@ def conserved_to_primitives(U, A, gamma):
     u = U[1, :] / U[0, :]
     p = (U[2, :] / A - 0.5 * rho * u ** 2) * (gamma - 1)
     c = np.sqrt(gamma * p / rho)
+
     return rho, u, p, c
 
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=True, cache=True, parallel=True)
 def flux(U, A, rho, u, p):
     """
     JIT-compiled, array-wise flux calculation.
@@ -70,7 +72,7 @@ def flux(U, A, rho, u, p):
     return F
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
     """
     Well-balanced source term.
@@ -89,7 +91,7 @@ def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
     return S
 
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=True, cache=True, parallel=True)
 def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
     """
     WENO-HLLC numerical flux with Correct Area Scaling.
@@ -100,7 +102,7 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
 
     F_hat = np.zeros((num_comp, nc + 1))
 
-    for i in range(nc + 1):
+    for i in prange(nc + 1):
         ii = i + ng - 1
 
         # 1. Calculate the EXACT same interface area used in the source term
@@ -126,7 +128,6 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
         F_hat[0, i] = F_hllc[0] * A_int
         F_hat[1, i] = F_hllc[1] * A_int
         F_hat[2, i] = F_hllc[2] * A_int
-
 
     return F_hat
 
@@ -216,4 +217,5 @@ def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
 
     if t + dt_stable > t_end:
         dt_stable = max(0.0, t_end - t)
+
     return dt_stable

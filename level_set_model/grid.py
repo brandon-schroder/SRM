@@ -58,18 +58,15 @@ def save_3d_geometry(filename, solver):
         grid = solver.grid
 
         # Extract 1D axes from the 3D polar coordinates to save space
-        # R: varies along dim 0
         r_axis = grid.polar_coords[0][:, 0, 0]
-        # Theta: varies along dim 1
-        th_axis = grid.polar_coords[1][0, :, 0]
-        # Z: varies along dim 2
+        t_axis = grid.polar_coords[1][0, :, 0]
         z_axis = grid.polar_coords[2][0, 0, :]
 
         dset_r = g_geo.create_dataset("r", data=r_axis)
         dset_r.attrs["units"] = "m"
 
-        dset_th = g_geo.create_dataset("theta", data=th_axis)
-        dset_th.attrs["units"] = "rad"
+        dset_t = g_geo.create_dataset("theta", data=t_axis)
+        dset_t.attrs["units"] = "rad"
 
         dset_z = g_geo.create_dataset("z", data=z_axis)
         dset_z.attrs["units"] = "m"

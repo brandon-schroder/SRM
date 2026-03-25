@@ -88,7 +88,7 @@ def weno_godunov(phi, dx, r_coords, ng=3):
 # ADAPTIVE TIMESTEP COMPUTATION
 # =============================================================================
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=True, cache=True, parallel=True)
 def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
 
     """
@@ -111,7 +111,7 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
 
     # Pre-compute maximum |∇φ| in each radial layer (nr values)
     max_grad_per_r = np.zeros(nr, dtype=grad_mag.dtype)
-    for i in range(nr):
+    for i in prange(nr):
         max_val = 0.0
         for j in range(ntheta):
             for k in range(nz):
