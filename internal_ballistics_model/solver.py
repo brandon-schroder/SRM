@@ -96,7 +96,7 @@ class IBSolver:
         self.state.rho, self.state.u, self.state.p, self.state.c = \
             conserved_to_primitives(U_full, self.state.A, self.cfg.gamma)
 
-        self.state.br, self.state.eta = burn_rate(self.cfg, self.state, model=self.cfg.erosive_model)
+        self.state.br = burn_rate_model(self.cfg, self.state, model=self.cfg.erosive_model)
 
         F_hat = compute_numerical_flux(U_full, A_interfaces, self.state.rho, self.state.u, self.state.p, self.state.c,
                                        self.cfg.gamma, self.cfg.ng)

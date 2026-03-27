@@ -36,13 +36,6 @@ class SimulationConfig:
     n_exp: float = 0.36
     erosive_model: str = "none"
 
-    # Erosive Constants (Mukunda-Paul)
-    erosive_mu: float = 8.85E-5
-    erosive_K1: float = 0.023
-    erosive_K2: float = 2.3714
-    erosive_m: float = -0.125
-    erosive_gth: float = 35.0
-
     output_filename: str = "internal_ballistics.h5"
     log_interval: int = 10
     dtype: np.dtype = np.float64
@@ -73,7 +66,6 @@ class FlowState:
     A_propellant: np.ndarray = field(init=False)
 
     br: np.ndarray = field(init=False)
-    eta: np.ndarray = field(init=False)
 
     def __post_init__(self):
         shape = (self.n_cells,)
