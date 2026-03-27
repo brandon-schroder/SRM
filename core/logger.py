@@ -11,55 +11,61 @@ class HDF5Logger:
         self.buffer = defaultdict(list)
         self.buffer_size = buffer_size
         self.units = units or {}
-        self.default_dtype = dtype  # [Opt] Force float32 to save 50% disk space
+        self.default_dtype = dtype
 
-        # [Opt] libver='latest' enables performance features like SWMR
-        with h5py.File(self.filename, "w", libver='latest') as f:
-            f.create_group("timeseries")
-            f.create_group("fields")
-            if config:
-                self._save_config(f, config)
+        # 1. Keep file open persistently
+        self.file = h5py.File(self.filename, "w", libver='latest')
+        self.file.create_group("timeseries")
+        self.file.create_group("fields")
+
+        if config:
+            self._save_config(self.file, config)
+
+        # 4. Enable SWMR for crash robustness and live-viewing
+        self.file.swmr_mode = True
 
     def log(self, name, value):
         self.buffer[name].append(value)
-        # Check size of the list, not the name string
         if len(self.buffer[name]) >= self.buffer_size:
             self.flush()
 
     def flush(self):
         if not self.buffer: return
 
-        # [Safety] Use append mode
-        with h5py.File(self.filename, "a", libver='latest') as f:
-            for name, values in self.buffer.items():
-                if not values: continue
+        for name, values in self.buffer.items():
+            if not values: continue
 
-                # Convert and Cast
-                data = np.array(values, dtype=self.default_dtype)
+            data = np.array(values, dtype=self.default_dtype)
+            group_name = "timeseries" if data.ndim == 1 else "fields"
+            group = self.file[group_name]
 
-                # Auto-Classify
-                group_name = "timeseries" if data.ndim == 1 else "fields"
-                group = f[group_name]
+            if name not in group:
+                base_shape = data.shape[1:]
+                max_shape = (None,) + base_shape
 
-                # Lazy Create
-                if name not in group:
-                    base_shape = data.shape[1:]
-                    max_shape = (None,) + base_shape
+                # 3. Explicit chunking aligned with buffer size
+                chunk_shape = (self.buffer_size,) + base_shape if base_shape else (self.buffer_size,)
 
-                    dset = group.create_dataset(
-                        name, shape=(0,) + base_shape, maxshape=max_shape,
-                        dtype=self.default_dtype, compression="gzip", chunks=True
-                    )
-                    if name in self.units:
-                        dset.attrs["units"] = self.units[name]
+                dset = group.create_dataset(
+                    name,
+                    shape=(0,) + base_shape,
+                    maxshape=max_shape,
+                    dtype=self.default_dtype,
+                    compression="lzf",  # 2. Faster compression
+                    chunks=chunk_shape
+                )
+                if name in self.units:
+                    dset.attrs["units"] = self.units[name]
 
-                # Append
-                dset = group[name]
-                n_curr = dset.shape[0]
-                dset.resize(n_curr + len(values), axis=0)
-                dset[n_curr:] = data
+            dset = group[name]
+            n_curr = dset.shape[0]
+            dset.resize(n_curr + len(values), axis=0)
+            dset[n_curr:] = data
 
         self.buffer.clear()
+
+        # Manually flush the HDF5 internal buffers to disk
+        self.file.flush()
 
     def _save_config(self, f, config_obj):
         try:
@@ -74,13 +80,13 @@ class HDF5Logger:
 
     def finalize(self):
         self.flush()
+        if hasattr(self, 'file') and self.file:
+            self.file.close()
 
-    # --- [Safety] Context Manager Support ---
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # Flushes data even if the simulation crashes
         self.finalize()
 
 
