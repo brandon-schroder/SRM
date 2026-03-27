@@ -1,5 +1,6 @@
 import numpy as np
 from numba import njit
+from enum import IntEnum
 
 @njit(fastmath=True, cache=True)
 def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
@@ -229,32 +230,29 @@ def boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
 
 # ==============================================================
 
-# Define integer constants for Numba routing
-INLET_REFLECTIVE = 0
-INLET_CHARACTERISTIC = 1
-INLET_TRANSMISSIVE = 2
-OUTLET_REFLECTIVE = 0
-OUTLET_CHARACTERISTIC = 1
-OUTLET_TRANSMISSIVE = 2
+class BCType(IntEnum):
+    REFLECTIVE = 0
+    CHARACTERISTIC = 1
+    TRANSMISSIVE = 2
 
 @njit(fastmath=True, cache=True)
 def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng, inlet_type, outlet_type):
     """Apply characteristic-based boundary conditions dynamically."""
 
     # Route Inlet Boundary Condition
-    if inlet_type == INLET_REFLECTIVE:
+    if inlet_type == BCType.REFLECTIVE.value:
         U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
-    elif inlet_type == INLET_CHARACTERISTIC:
+    elif inlet_type == BCType.CHARACTERISTIC.value:
         U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
-    elif inlet_type == INLET_TRANSMISSIVE:
+    elif inlet_type == BCType.TRANSMISSIVE.value:
         U = boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
 
     # Route Outlet Boundary Condition
-    if outlet_type == OUTLET_REFLECTIVE:
+    if outlet_type == BCType.REFLECTIVE.value:
         U = boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
-    elif outlet_type == OUTLET_CHARACTERISTIC:
+    elif outlet_type == BCType.CHARACTERISTIC.value:
         U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
-    elif outlet_type == OUTLET_TRANSMISSIVE:
+    elif outlet_type == BCType.TRANSMISSIVE.value:
         U = boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
 
     return U
