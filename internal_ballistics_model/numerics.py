@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit, prange
 
 from core.wenos import weno3_left as weno_left, weno3_right as weno_right
+from .boundary import apply_boundary_jit
 
 
 """
@@ -203,7 +204,6 @@ def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
     return F
 
 
-
 @njit(cache=True)
 def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
 
@@ -219,3 +219,46 @@ def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
         dt_stable = max(0.0, t_end - t)
 
     return dt_stable
+
+
+@njit(cache=True)
+def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng,
+                         inlet_bc, outlet_bc, rho_p, Tf, br, P_propellant, dz,
+                         rho_out, u_out, p_out, c_out):
+    nc = U_interior.shape[1]
+
+    # 1. Update interior
+    for i in range(3):
+        for j in range(nc):
+            U_full[i, j + ng] = U_interior[i, j]
+
+    # 2. Compute interface areas internally
+    A_interfaces = np.zeros(nc + 1)
+    for i in range(nc + 1):
+        A_interfaces[i] = 0.5 * (A[ng - 1 + i] + A[ng + i])
+
+    # 3. Apply Boundaries (Write back to U_full in-place)
+    U_bound = apply_boundary_jit(U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng, inlet_bc, outlet_bc)
+    for i in range(3):
+        for j in range(U_full.shape[1]):
+            U_full[i, j] = U_bound[i, j]
+
+    # 4. Primitives (Write directly to Python's memory in-place!)
+    rho_temp, u_temp, p_temp, c_temp = conserved_to_primitives(U_full, A, gamma)
+    for j in range(rho_temp.shape[0]):
+        rho_out[j] = rho_temp[j]
+        u_out[j] = u_temp[j]
+        p_out[j] = p_temp[j]
+        c_out[j] = c_temp[j]
+
+    # 5. Compute Fluxes and Sources
+    F_hat = compute_numerical_flux(U_full, A_interfaces, rho_out, u_out, p_out, c_out, gamma, ng)
+    S = source(rho_p, Tf, br[ng:-ng], R, gamma, p_out[ng:-ng], P_propellant[ng:-ng], A_interfaces, dz)
+
+    # 6. Final Assembly
+    rhs_out = np.zeros((3, nc))
+    for i in range(3):
+        for j in range(nc):
+            rhs_out[i, j] = S[i, j] - (F_hat[i, j + 1] - F_hat[i, j]) / dz
+
+    return rhs_out

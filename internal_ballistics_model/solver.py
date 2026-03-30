@@ -78,34 +78,21 @@ class IBSolver:
 
         self.recorder.save()
 
+
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
-        U_full = self.state.U
-        U_full[:, self.grid.interior] = U_interior
 
-        # A_interfaces calculation removed from here
-
-        U_full = apply_boundary_jit(
-            U_full, self.state.A, self.cfg.gamma, self.cfg.R,
-            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.ng,
-            self.inlet_bc_flag, self.outlet_bc_flag
-        )
-
-        self.state.rho, self.state.u, self.state.p, self.state.c = \
-            conserved_to_primitives(U_full, self.state.A, self.cfg.gamma)
-
+        # Calculate burn rate outside
         self.state.br = burn_rate_model(self.cfg, self.state, model=self.cfg.erosive_model)
 
-        F_hat = compute_numerical_flux(U_full, self.A_interfaces, self.state.rho, self.state.u, self.state.p,
-                                       self.state.c,
-                                       self.cfg.gamma, self.cfg.ng)
+        # Call Numba, passing in the state primitives to be updated
+        rhs_out = rhs_numerics(
+            U_interior,self.state.U,self.state.A,self.cfg.gamma,self.cfg.R,
+            self.cfg.p0_inlet, self.cfg.t0_inlet,self.cfg.p_inf,self.grid.ng,self.inlet_bc_flag, self.outlet_bc_flag,
+            self.cfg.rho_p, self.cfg.Tf, self.state.br, self.state.P, self.grid.dx[2],
+            self.state.rho, self.state.u, self.state.p, self.state.c
+        )
 
-        S = source(self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior], self.cfg.R, self.cfg.gamma,
-                   self.state.p[self.grid.interior], self.state.P[self.grid.interior], self.A_interfaces,
-                   self.grid.dx[2])
-
-        dFdz = (F_hat[:, 1:] - F_hat[:, :-1]) / self.grid.dx[2]
-
-        return S - dFdz
+        return rhs_out
 
     def step(self) -> Tuple[float, float]:
         self.dt = adaptive_timestep(
@@ -114,14 +101,17 @@ class IBSolver:
 
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
-        if self.dt > 1e-16:  # RMS Residuals for the mass, momentum and energy equations
-            # 5. Utilize the integrator's preserved initial state (u0) to calculate residuals
-            rate_of_change = (self.state.U[:, self.grid.interior] - self.integrator.u0) / self.dt
-            self.residuals["res_rho"] = np.sqrt(np.mean(rate_of_change[0] ** 2))
-            self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
-            self.residuals["res_E"] = np.sqrt(np.mean(rate_of_change[2] ** 2))
+
 
         if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
+
+            if self.dt > 1e-16:  # RMS Residuals for the mass, momentum and energy equations
+                # 5. Utilize the integrator's preserved initial state (u0) to calculate residuals
+                rate_of_change = (self.state.U[:, self.grid.interior] - self.integrator.u0) / self.dt
+                self.residuals["res_rho"] = np.sqrt(np.mean(rate_of_change[0] ** 2))
+                self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
+                self.residuals["res_E"] = np.sqrt(np.mean(rate_of_change[2] ** 2))
+
             self.recorder.save()
 
         self.state.t += self.dt
