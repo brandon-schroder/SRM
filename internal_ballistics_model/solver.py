@@ -1,6 +1,4 @@
 import pandas as pd
-import numpy as np
-from typing import Tuple
 
 from .grid import *
 from .boundary import *
@@ -10,8 +8,7 @@ from .config import *
 from .postprocess import *
 
 from core.logger import *
-# 1. Import the new class-based low storage integrator
-from core.time_integrators import SSPRK33LowStorage
+from core.time_integrators import SSPRK33LowStorage as rk_step
 
 
 class IBSolver:
@@ -19,11 +16,12 @@ class IBSolver:
         self.cfg = config
         self.grid = Grid1D(config)
         self.state = FlowState(n_cells=self.grid.dims[2], dtype=self.cfg.dtype)
+        self.step_count = 0
         self.dt = 0.0
 
         # 2. Instantiate the integrator with the exact shape of the interior conserved variables array
         interior_shape = self.state.U[:, self.grid.interior].shape
-        self.integrator = SSPRK33LowStorage(shape=interior_shape, dtype=self.cfg.dtype)
+        self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
         # Pre-allocate array for face interfaces to avoid doing it in _compute_rhs
         self.A_interfaces = np.zeros(interior_shape[1] + 1, dtype=self.cfg.dtype)
@@ -46,8 +44,7 @@ class IBSolver:
             summary_callback=compute_summary_stats
         )
 
-    def set_geometry(self, z: np.ndarray, A: np.ndarray, P: np.ndarray, P_wetted: np.ndarray,
-                     A_propellant: np.ndarray, A_casing: np.ndarray):
+    def set_geometry(self, z, A, P, P_wetted, A_propellant, A_casing):
         ng = self.grid.ng
         target_dtype = self.cfg.dtype
         z_grid = self.grid.cart_coords[2]
@@ -124,8 +121,11 @@ class IBSolver:
             self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
             self.residuals["res_E"] = np.sqrt(np.mean(rate_of_change[2] ** 2))
 
+        if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
+            self.recorder.save()
+
         self.state.t += self.dt
-        self.recorder.save()
+        self.step_count += 1
 
         return self.dt, self.state.t
 
