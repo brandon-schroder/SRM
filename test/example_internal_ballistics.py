@@ -91,6 +91,9 @@ def main():
         except Exception as e:
             print(f"\n[ERROR] Simulation crashed: {e}")
             raise
+        finally:
+            solver.finalize()
+
     end_time = time.time()
     # ---------------------------------------------------------
     # 4. Post-Processing

@@ -37,7 +37,7 @@ def main():
         br_initial=br_initial,
         output_filename="level_set_results.h5",
         vtk_dir="vtk_output",
-        log_interval_vtk=50
+        vtk_interval=100
     )
 
     config.dtype = np.float32
@@ -55,30 +55,30 @@ def main():
     # ---------------------------------------------------------
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
     t_start = time.time()
+    with solver.recorder:
+        try:
+            while solver.state.t < config.t_end:
+                # Step returns dt and new time
+                dt, current_time = solver.step()
 
-    while solver.state.t < config.t_end:
-        # Step returns dt and new time
-        dt, current_time = solver.step()
+                # Update burn rate (if coupled, this would come from internal ballistics)
+                solver.state.br = solver.set_burn_rate(x_ib, br_ib)
 
-        # Update burn rate (if coupled, this would come from internal ballistics)
-        solver.state.br = solver.set_burn_rate(x_ib, br_ib)
-
-        metrics = solver.get_derived_quantities()
-
-        if solver.step_count % 1 == 0:
-            print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | ")
+                if solver.step_count % 1 == 0:
+                    print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | ")
+        except KeyboardInterrupt:
+            print("\nSimulation interrupted by user. Saving data...")
+        except Exception as e:
+            print(f"\n[ERROR] Simulation crashed: {e}")
+            raise
+        finally:
+            solver.finalize()
 
     t_end = time.time()
     print(f"Simulation took {t_end - t_start:.2f} seconds.")
 
     # ---------------------------------------------------------
-    # 4. Finalization
-    # ---------------------------------------------------------
-    solver.finalize()
-    print("\nSimulation Complete. Data saved to HDF5 and VTK.")
-
-    # ---------------------------------------------------------
-    # 5. Post-Processing & Plotting
+    # 4. Post-Processing & Plotting
     # ---------------------------------------------------------
     h5_path = "level_set_results.h5"
 
