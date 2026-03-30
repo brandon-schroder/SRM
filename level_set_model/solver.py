@@ -25,6 +25,7 @@ class LSSolver:
         self.state = State(dims=self.grid.dims, dtype=self.cfg.dtype)
 
         # 3. Initialize Solver State Variables
+        self.bc_flag = BCType[self.cfg.bc_type.upper()].value
         self.step_count = 0
         self.dt = 0.0
         self.vtk_times = []
@@ -86,7 +87,7 @@ class LSSolver:
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
         phi_full = self.state.phi
         phi_full[self.grid.interior] = phi_interior
-        phi_full = apply_boundary_conditions(phi_full, self.grid.ng)
+        phi_full = apply_boundary_conditions(phi_full, self.grid.ng, self.bc_flag)
 
         self.state.grad_mag = weno_godunov(phi_full, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
 
@@ -108,6 +109,26 @@ class LSSolver:
         self.state.br = np.interp(z_ls, x, br)
         return self.state.br
 
+    def step(self) -> Tuple[float, float]:
+        dt = adaptive_timestep(
+            self.state.grad_mag, self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
+            self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
+
+        self.integrator.step(self.state.phi[self.grid.interior], dt, self._compute_rhs)
+
+        self._get_geometry()
+
+        self.state.t += dt
+        self.step_count += 1
+
+        if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
+            self.recorder.save()
+
+        if self.step_count % self.cfg.vtk_interval == 0 or self.state.t >= self.cfg.t_end:
+            self._save_vtk()
+
+        return dt, self.state.t
+
     def get_derived_quantities(self):
         """
         Called by SimulationRecorder to fetch derived metrics for logging.
@@ -116,55 +137,31 @@ class LSSolver:
         data["scalars"]["time"] = self.state.t
         return data
 
-    def step(self) -> Tuple[float, float]:
-        dt = adaptive_timestep(
-            self.state.grad_mag, self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
-            self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
-
-        # 2. In-place integration completely replaces the old .copy() and assignment mechanics
-        self.integrator.step(self.state.phi[self.grid.interior], dt, self._compute_rhs)
-
-        self._get_geometry()
-
-        self.state.t += dt
-        self.step_count += 1
-
-        self.recorder.save()
-        self._save_vtk()
-
-        return dt, self.state.t
-
     def _save_vtk(self):
         """
         Handles 3D visualization output separately from HDF5 logging.
         """
-        int_vtk = getattr(self.cfg, 'log_interval_vtk', 100)
 
-        if self.step_count % int_vtk == 0:
-            vtk_name = f"step_{self.step_count:05d}.vtk"
-            vtk_path = os.path.join(self.vtk_dir, vtk_name)
+        vtk_name = f"step_{self.step_count:05d}.vtk"
+        vtk_path = os.path.join(self.vtk_dir, vtk_name)
+        self.vtk_times.append(self.state.t)
 
-            self.vtk_times.append(self.state.t)
+        self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
+        phi_bounded = np.maximum(self.state.phi, self.state.casing)
+        self.grid.pv_grid["propellant_bounded"] = phi_bounded.flatten(order='F')
 
-            self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
-            phi_bounded = np.maximum(self.state.phi, self.state.casing)
-            self.grid.pv_grid["propellant_bounded"] = phi_bounded.flatten(order='F')
-            if hasattr(self.state, 'br'):
-                self.grid.pv_grid["burn_rate"] = self.state.br.flatten(order='F')
-
-            self.grid.pv_grid.save(vtk_path)
+        self.grid.pv_grid.save(vtk_path)
 
     def finalize(self):
         self.recorder.finalize()
 
         # Generate VTK Series File
         series_path = os.path.join(self.vtk_dir, "results.vtk.series")
-        interval = getattr(self.cfg, 'log_interval_vtk', 100)
 
         series_data = {
             "file-series-version": "1.0",
             "files": [
-                {"name": f"step_{i * interval:05d}.vtk", "time": t}
+                {"name": f"step_{i * self.cfg.vtk_interval:05d}.vtk", "time": t}
                 for i, t in enumerate(self.vtk_times)
             ]
         }

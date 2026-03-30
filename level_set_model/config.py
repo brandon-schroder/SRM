@@ -23,12 +23,13 @@ class SimulationConfig:
 
     # Initial & Boundary Conditions
     br_initial: float = 1.0E-6
+    bc_type: str = "default"
 
     output_filename: str = "output.h5"
     vtk_dir: str = "vtk_output"
 
-    log_interval_hdf5: int = 10  # Log 1D profiles every 10 steps
-    log_interval_vtk: int = 100  # Save 3D .vtk files every 100 steps
+    log_interval: int = 10  # Log 1D profiles every 10 steps
+    vtk_interval: int = 10  # Save 3D .vtk files every 100 steps
 
     dtype: np.dtype = np.float64
 
