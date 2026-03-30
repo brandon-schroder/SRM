@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from typing import Tuple
 
 from .grid import *
 from .boundary import *
@@ -8,7 +10,8 @@ from .config import *
 from .postprocess import *
 
 from core.logger import *
-from core.time_integrators import ssp_rk_3_3
+# 1. Import the new class-based low storage integrator
+from core.time_integrators import SSPRK33LowStorage
 
 
 class IBSolver:
@@ -18,7 +21,13 @@ class IBSolver:
         self.state = FlowState(n_cells=self.grid.dims[2], dtype=self.cfg.dtype)
         self.dt = 0.0
 
-        # Map string config to integer flags for Numba
+        # 2. Instantiate the integrator with the exact shape of the interior conserved variables array
+        interior_shape = self.state.U[:, self.grid.interior].shape
+        self.integrator = SSPRK33LowStorage(shape=interior_shape, dtype=self.cfg.dtype)
+
+        # Pre-allocate array for face interfaces to avoid doing it in _compute_rhs
+        self.A_interfaces = np.zeros(interior_shape[1] + 1, dtype=self.cfg.dtype)
+
         self.inlet_bc_flag = BCType[self.cfg.inlet_bc_type.upper()].value
         self.outlet_bc_flag = BCType[self.cfg.outlet_bc_type.upper()].value
 
@@ -54,6 +63,10 @@ class IBSolver:
             arr[:ng] = arr[ng]
             arr[-ng:] = arr[-ng - 1]
 
+        # 3. Calculate interface areas ONCE during geometry setup instead of inside the RHS loop
+        self.A_interfaces[:] = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
+                                      self.state.A[self.grid.ng: -self.grid.ng + 1])
+
         # NOTE: dAdz is no longer pre-calculated here to ensure well-balanced source terms.
 
     def initialize(self):
@@ -62,7 +75,8 @@ class IBSolver:
         self.state.u[:] = self.cfg.u_initial
         self.state.br[:] = self.cfg.br_initial  # simplified initialization
 
-        self.state.U[:] = primitives_to_conserved(self.state.rho, self.state.u, self.state.p, self.state.A, self.cfg.gamma)
+        self.state.U[:] = primitives_to_conserved(self.state.rho, self.state.u, self.state.p, self.state.A,
+                                                  self.cfg.gamma)
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
 
         self.recorder.save()
@@ -71,8 +85,7 @@ class IBSolver:
         U_full = self.state.U
         U_full[:, self.grid.interior] = U_interior
 
-        A_interfaces = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
-                              self.state.A[self.grid.ng: -self.grid.ng + 1])
+        # A_interfaces calculation removed from here
 
         U_full = apply_boundary_jit(
             U_full, self.state.A, self.cfg.gamma, self.cfg.R,
@@ -85,11 +98,13 @@ class IBSolver:
 
         self.state.br = burn_rate_model(self.cfg, self.state, model=self.cfg.erosive_model)
 
-        F_hat = compute_numerical_flux(U_full, A_interfaces, self.state.rho, self.state.u, self.state.p, self.state.c,
+        F_hat = compute_numerical_flux(U_full, self.A_interfaces, self.state.rho, self.state.u, self.state.p,
+                                       self.state.c,
                                        self.cfg.gamma, self.cfg.ng)
 
         S = source(self.cfg.rho_p, self.cfg.Tf, self.state.br[self.grid.interior], self.cfg.R, self.cfg.gamma,
-                   self.state.p[self.grid.interior], self.state.P[self.grid.interior], A_interfaces, self.grid.dx[2])
+                   self.state.p[self.grid.interior], self.state.P[self.grid.interior], self.A_interfaces,
+                   self.grid.dx[2])
 
         dFdz = (F_hat[:, 1:] - F_hat[:, :-1]) / self.grid.dx[2]
 
@@ -100,16 +115,15 @@ class IBSolver:
             self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma,
             self.grid.dx[2], self.grid.ng, self.state.t, self.cfg.t_end)
 
-        U_int_old = self.state.U[:, self.grid.interior].copy()
-        U_int_new = ssp_rk_3_3(U_int_old, self.dt, self._compute_rhs)
+        self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
-        if self.dt > 1e-16: # RMS Residuals for the mass, momentum and energy equations
-            rate_of_change = (U_int_new - U_int_old) / self.dt
+        if self.dt > 1e-16:  # RMS Residuals for the mass, momentum and energy equations
+            # 5. Utilize the integrator's preserved initial state (u0) to calculate residuals
+            rate_of_change = (self.state.U[:, self.grid.interior] - self.integrator.u0) / self.dt
             self.residuals["res_rho"] = np.sqrt(np.mean(rate_of_change[0] ** 2))
             self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
             self.residuals["res_E"] = np.sqrt(np.mean(rate_of_change[2] ** 2))
 
-        self.state.U[:, self.grid.interior] = U_int_new
         self.state.t += self.dt
         self.recorder.save()
 

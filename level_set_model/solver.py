@@ -1,7 +1,6 @@
 import os
 import json
 import pandas as pd
-import numpy as np
 from typing import Tuple
 
 from .grid import *
@@ -11,7 +10,7 @@ from .geometry import *
 from .boundary import *
 from .postprocess import *
 
-from core.time_integrators import ssp_rk_3_3_low_storage as rk_step
+from core.time_integrators import SSPRK33LowStorage as rk_step
 from core.logger import SimulationRecorder
 
 
@@ -29,6 +28,10 @@ class LSSolver:
         self.step_count = 0
         self.dt = 0.0
         self.vtk_times = []
+
+        # Instantiate the integrator, pre-allocating memory for the interior level set field
+        interior_shape = self.state.phi[self.grid.interior].shape
+        self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
         # 4. Initialize Recorder
         self.recorder = SimulationRecorder(
@@ -122,9 +125,8 @@ class LSSolver:
             self.state.grad_mag, self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
             self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
 
-        phi_int = self.state.phi[self.grid.interior]
-        phi_new = rk_step(phi_int, dt, self._compute_rhs)
-        self.state.phi[self.grid.interior] = phi_new
+        # 2. In-place integration completely replaces the old .copy() and assignment mechanics
+        self.integrator.step(self.state.phi[self.grid.interior], dt, self._compute_rhs)
 
         self._get_geometry()
 

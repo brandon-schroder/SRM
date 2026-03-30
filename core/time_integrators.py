@@ -4,97 +4,155 @@ import numpy as np
 # Total Variation Diminishing Runge-Kutta
 # ===================================================================
 
+class SSPRK11:
+    """1st-order, 1-stage SSP Runge-Kutta (Forward Euler)."""
 
-def ssp_rk_1_1(u: np.ndarray, dt: float, L) -> np.ndarray:
-    """1st-order, 1-stage SSP Runge-Kutta."""
-    Lu = L(u)
-    u_next = u + dt * Lu
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.Lu = np.zeros(shape, dtype=dtype)
 
-    return u_next
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        self.Lu[:] = rhs_func(u)
+        u += dt * self.Lu
+        return u
 
 
-def ssp_rk_2_2(u: np.ndarray, dt: float, L) -> np.ndarray:
+class SSPRK22:
     """2nd-order, 2-stage SSP Runge-Kutta."""
-    # Stage 1
-    Lu = L(u)
-    u1 = u + dt * Lu
 
-    # Stage 2
-    Lu1 = L(u1)
-    u_next = 0.5 * (u + u1 + dt * Lu1)
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.u1 = np.zeros(shape, dtype=dtype)
+        self.Lu = np.zeros(shape, dtype=dtype)
 
-    return u_next
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        # Stage 1
+        self.Lu[:] = rhs_func(u)
+        self.u1[:] = u + dt * self.Lu
+
+        # Stage 2
+        self.Lu[:] = rhs_func(self.u1)
+        u[:] = 0.5 * (u + self.u1 + dt * self.Lu)
+
+        return u
 
 
-def ssp_rk_3_3(u: np.ndarray, dt: float, L) -> np.ndarray:
+class SSPRK33:
     """3rd-order, 3-stage SSP Runge-Kutta."""
-    # Stage 1
-    Lu = L(u)
-    u1 = u + dt * Lu
 
-    # Stage 2
-    Lu1 = L(u1)
-    u2 = (3.0 / 4.0) * u + (1.0 / 4.0) * u1 + (1.0 / 4.0) * dt * Lu1
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.u1 = np.zeros(shape, dtype=dtype)
+        self.u2 = np.zeros(shape, dtype=dtype)
+        self.Lu = np.zeros(shape, dtype=dtype)
 
-    # Stage 3
-    Lu2 = L(u2)
-    u_next = (1.0 / 3.0) * u + (2.0 / 3.0) * u2 + (2.0 / 3.0) * dt * Lu2
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        # Stage 1
+        self.Lu[:] = rhs_func(u)
+        self.u1[:] = u + dt * self.Lu
 
-    return u_next
+        # Stage 2
+        self.Lu[:] = rhs_func(self.u1)
+        self.u2[:] = (3.0 / 4.0) * u + (1.0 / 4.0) * self.u1 + (1.0 / 4.0) * dt * self.Lu
 
+        # Stage 3
+        self.Lu[:] = rhs_func(self.u2)
+        u[:] = (1.0 / 3.0) * u + (2.0 / 3.0) * self.u2 + (2.0 / 3.0) * dt * self.Lu
 
-def ssp_rk_3_3_low_storage(u: np.ndarray, dt: float, L) -> np.ndarray:
-    """Low-storage 3-stage, 3rd-order SSP Runge–Kutta (explicit) with SSP coefficient ~2."""
-    u0 = u.copy()
-
-    # Stage 1
-    u = u0 + dt * L(u0)
-
-    # Stage 2
-    u = (3.0 / 4.0) * u0 + (1.0 / 4.0) * (u + dt * L(u))
-
-    # Stage 3
-    u = (1.0 / 3.0) * u0 + (2.0 / 3.0) * (u + dt * L(u))
-
-    return u
+        return u
 
 
-def classic_rk4(u: np.ndarray, dt: float, L) -> np.ndarray:
+class SSPRK33LowStorage:
+    """Low-storage 3-stage, 3rd-order SSP Runge–Kutta (explicit)."""
+
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.u0 = np.zeros(shape, dtype=dtype)
+        self.Lu = np.zeros(shape, dtype=dtype)
+
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        # Save initial state
+        self.u0[:] = u
+
+        # Stage 1
+        self.Lu[:] = rhs_func(self.u0)
+        u[:] = self.u0 + dt * self.Lu
+
+        # Stage 2
+        self.Lu[:] = rhs_func(u)
+        u[:] = (3.0 / 4.0) * self.u0 + (1.0 / 4.0) * (u + dt * self.Lu)
+
+        # Stage 3
+        self.Lu[:] = rhs_func(u)
+        u[:] = (1.0 / 3.0) * self.u0 + (2.0 / 3.0) * (u + dt * self.Lu)
+
+        return u
+
+
+class ClassicRK4:
     """4th-order, 4-stage Classical Runge-Kutta."""
-    # Stage 1
-    Lu = L(u)
-    u1 = u + (1.0 / 2.0) * dt * Lu
 
-    # Stage 2
-    Lu1 = L(u1)
-    u2 = (1.0 / 2.0) * u - (1.0 / 4.0) * dt * Lu + (1.0 / 2.0) * u1 + (1.0 / 2.0) * dt * Lu1
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.u1 = np.zeros(shape, dtype=dtype)
+        self.u2 = np.zeros(shape, dtype=dtype)
+        self.u3 = np.zeros(shape, dtype=dtype)
+        self.Lu = np.zeros(shape, dtype=dtype)
+        self.Lu1 = np.zeros(shape, dtype=dtype)
+        self.L_temp = np.zeros(shape, dtype=dtype)
 
-    # Stage 3
-    Lu2 = L(u2)
-    u3 = (1.0 / 9.0) * u - (1.0 / 9.0) * dt * Lu + (2.0 / 9.0) * u1 - (1.0 / 3.0) * dt * Lu1 + (2.0 / 3.0) * u2 + dt * Lu2
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        # Stage 1
+        self.Lu[:] = rhs_func(u)
+        self.u1[:] = u + (1.0 / 2.0) * dt * self.Lu
 
-    # Stage 4
-    Lu3 = L(u3)
-    u_next = (1.0 / 3.0) * u1 + (1.0 / 6.0) * dt * Lu1 + (1.0 / 3.0) * u2 + (1.0 / 3.0) * u3 + (1.0 / 6.0) * dt * Lu3
+        # Stage 2
+        self.Lu1[:] = rhs_func(self.u1)
+        self.u2[:] = (1.0 / 2.0) * u - (1.0 / 4.0) * dt * self.Lu + (1.0 / 2.0) * self.u1 + (1.0 / 2.0) * dt * self.Lu1
 
-    return u_next
+        # Stage 3
+        self.L_temp[:] = rhs_func(self.u2)
+        self.u3[:] = (1.0 / 9.0) * u - (1.0 / 9.0) * dt * self.Lu + (2.0 / 9.0) * self.u1 - (
+                    1.0 / 3.0) * dt * self.Lu1 + (2.0 / 3.0) * self.u2 + dt * self.L_temp
+
+        # Stage 4
+        self.L_temp[:] = rhs_func(self.u3)
+        u[:] = (1.0 / 3.0) * self.u1 + (1.0 / 6.0) * dt * self.Lu1 + (1.0 / 3.0) * self.u2 + (1.0 / 3.0) * self.u3 + (
+                    1.0 / 6.0) * dt * self.L_temp
+
+        return u
 
 
-def ssp_rk_5_3(un, dt, F):
+class SSPRK53:
+    """3rd-order, 5-stage SSP Runge-Kutta."""
 
-    Lu = F(un)
-    u1 = un + (2.0 / 5.0) * dt * Lu
+    def __init__(self, shape: tuple, dtype=np.float64):
+        self.un = np.zeros(shape, dtype=dtype)
+        self.u1 = np.zeros(shape, dtype=dtype)
+        self.u2 = np.zeros(shape, dtype=dtype)
+        self.u3 = np.zeros(shape, dtype=dtype)
+        self.u4 = np.zeros(shape, dtype=dtype)
 
-    Lu1 = F(u1)
-    u2 = 0.5 * un + 0.5 * u1 + (1.0 / 5.0) * dt * Lu1
+        self.L_temp = np.zeros(shape, dtype=dtype)
+        self.Lu3 = np.zeros(shape, dtype=dtype)
 
-    Lu2 = F(u2)
-    u3 = 0.6 * un + 0.4 * u2 + (1.0 / 4.0) * dt * Lu2
+    def step(self, u: np.ndarray, dt: float, rhs_func) -> np.ndarray:
+        # Save initial state
+        self.un[:] = u
 
-    Lu3 = F(u3)
-    u4 = 0.2 * un + 0.8 * u3 + 0.5 * dt * Lu3
+        # Stage 1
+        self.L_temp[:] = rhs_func(self.un)
+        self.u1[:] = self.un + (2.0 / 5.0) * dt * self.L_temp
 
-    Lu4 = F(u4)
-    u_next = 0.5 * u2 + 0.1 * u3 + 0.4 * u4 + (3.0 / 50.0) * dt * Lu3 + 0.2 * dt * Lu4
+        # Stage 2
+        self.L_temp[:] = rhs_func(self.u1)
+        self.u2[:] = 0.5 * self.un + 0.5 * self.u1 + (1.0 / 5.0) * dt * self.L_temp
 
-    return u_next
+        # Stage 3
+        self.L_temp[:] = rhs_func(self.u2)
+        self.u3[:] = 0.6 * self.un + 0.4 * self.u2 + (1.0 / 4.0) * dt * self.L_temp
+
+        # Stage 4 (Need to persist Lu3 for the final stage)
+        self.Lu3[:] = rhs_func(self.u3)
+        self.u4[:] = 0.2 * self.un + 0.8 * self.u3 + 0.5 * dt * self.Lu3
+
+        # Stage 5
+        self.L_temp[:] = rhs_func(self.u4)
+        u[:] = 0.5 * self.u2 + 0.1 * self.u3 + 0.4 * self.u4 + (3.0 / 50.0) * dt * self.Lu3 + 0.2 * dt * self.L_temp
+
+        return u
