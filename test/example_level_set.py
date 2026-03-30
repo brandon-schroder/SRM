@@ -65,12 +65,8 @@ def main():
 
         metrics = solver.get_derived_quantities()
 
-        res_avg = metrics["scalars"].get("res_eikonal_avg", 0.0)
-        res_max = metrics["scalars"].get("res_eikonal_max", 0.0)
-
         if solver.step_count % 1 == 0:
-            print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | "
-                  f"Eikonal Avg={res_avg:.2e} | Max={res_max:.2e}")
+            print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | ")
 
     t_end = time.time()
     print(f"Simulation took {t_end - t_start:.2f} seconds.")
@@ -100,18 +96,8 @@ def main():
         mid_idx = a_prop_dist.shape[0] // 2
         a_mid_hist = f["fields/A_flow"][:, mid_idx]
 
-        # D. Load Stability Metrics (Eikonal Error)
-        # These keys must match METRICS defined in postprocess.py
-        if "timeseries/res_eikonal_avg" in f:
-            res_avg = f["timeseries/res_eikonal_avg"][:]
-            res_max = f["timeseries/res_eikonal_max"][:]
-        else:
-            res_avg = np.zeros_like(t_hist)
-            res_max = np.zeros_like(t_hist)
-            print("Warning: Stability metrics not found in HDF5.")
-
     # --- Plotting ---
-    fig, ax = plt.subplots(3, 1, figsize=(10, 12), sharex=False)
+    fig, ax = plt.subplots(2, 1, figsize=(10, 12), sharex=False)
 
     # Plot 1: Geometric Distributions (Final State)
     ax[0].plot(x_dist, a_prop_dist, 'b-', label='Flow Area', linewidth=2)
@@ -129,16 +115,6 @@ def main():
     ax[1].set_xlabel('Time [s]')
     ax[1].set_title('Burn Progression at Midpoint')
     ax[1].grid(True, alpha=0.3)
-
-    # Plot 3: Stability / Eikonal Residuals
-    # Ideal Level Set fields have |grad(phi)| = 1.0. Deviations indicate numerical error.
-    ax[2].semilogy(t_hist, res_avg, 'g-', label='Mean Error', linewidth=1.5)
-    ax[2].semilogy(t_hist, res_max, 'm--', label='Max Error', linewidth=1.5)
-    ax[2].set_ylabel('Eikonal Residual || |∇φ|-1 ||')
-    ax[2].set_xlabel('Time [s]')
-    ax[2].set_title('Level Set Field Stability (Eikonal Error)')
-    ax[2].legend()
-    ax[2].grid(True, which="both", alpha=0.3)
 
     plt.tight_layout()
     plt.show()

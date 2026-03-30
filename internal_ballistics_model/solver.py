@@ -29,8 +29,6 @@ class IBSolver:
         self.inlet_bc_flag = BCType[self.cfg.inlet_bc_type.upper()].value
         self.outlet_bc_flag = BCType[self.cfg.outlet_bc_type.upper()].value
 
-        self.residuals = {"res_rho": 0.0, "res_mom": 0.0, "res_E": 0.0}
-
         self.recorder = SimulationRecorder(
             solver=self,
             state_map={
@@ -101,17 +99,7 @@ class IBSolver:
 
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
-
-
         if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
-
-            if self.dt > 1e-16:  # RMS Residuals for the mass, momentum and energy equations
-                # 5. Utilize the integrator's preserved initial state (u0) to calculate residuals
-                rate_of_change = (self.state.U[:, self.grid.interior] - self.integrator.u0) / self.dt
-                self.residuals["res_rho"] = np.sqrt(np.mean(rate_of_change[0] ** 2))
-                self.residuals["res_mom"] = np.sqrt(np.mean(rate_of_change[1] ** 2))
-                self.residuals["res_E"] = np.sqrt(np.mean(rate_of_change[2] ** 2))
-
             self.recorder.save()
 
         self.state.t += self.dt
@@ -123,11 +111,6 @@ class IBSolver:
         data = compute_metrics(self.state, self.grid, self.cfg)
         data["scalars"]["time"] = self.state.t
         data["scalars"]["dt"] = self.dt
-
-        # 3. Inject Residuals (Calculated in step())
-        data["scalars"]["res_rho"] = self.residuals["res_rho"]
-        data["scalars"]["res_mom"] = self.residuals["res_mom"]
-        data["scalars"]["res_E"] = self.residuals["res_E"]
         return data
 
     def finalize(self):

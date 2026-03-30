@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import h5py
 import os
-import sys
+import time
 
 # Adjust import path as necessary based on your folder structure
 from internal_ballistics_model import SimulationConfig, IBSolver
@@ -74,7 +74,7 @@ def main():
     # 3. Main Loop
     # ---------------------------------------------------------
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
-
+    start_time = time.time()
     with solver.recorder:
         try:
             while solver.state.t < config.t_end:
@@ -84,24 +84,18 @@ def main():
                 if step_count % 1000 == 0:
                     max_p = np.max(solver.state.p) / 1e6
 
-                    # Monitor Residuals during run
-                    res_rho = solver.residuals.get("res_rho", 0.0)
-                    res_mom = solver.residuals.get("res_mom", 0.0)
-                    res_E = solver.residuals.get("res_E", 0.0)
-
-                    print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa | "
-                          f"Res(rho)={res_rho:.2e}| Res(mom)={res_mom:.2e}| Res(E)={res_E:.2e}")
+                    print(f"t={current_time:.5f}s | dt={dt:.2e} | P_max={max_p:.2f} MPa |")
 
         except KeyboardInterrupt:
             print("\nSimulation interrupted by user. Saving data...")
         except Exception as e:
             print(f"\n[ERROR] Simulation crashed: {e}")
             raise
-
+    end_time = time.time()
     # ---------------------------------------------------------
     # 4. Post-Processing
     # ---------------------------------------------------------
-    print(f"\nSimulation Complete (t = {solver.state.t:.4f} s)")
+    print(f"\nSimulation Complete (t = {solver.state.t:.4f} s) (CPU time = {end_time - start_time:.2f} s)")
 
     print(f"Grid Memory: {solver.state.U.nbytes / 1e3:.3f} kB")
 
@@ -125,63 +119,12 @@ def main():
         p_head_hist = f["timeseries/p_head"][:]
         thrust_hist = f["timeseries/thrust"][:]
 
-        # 3. Residuals (Check if they exist)
-        res_rho_hist = None
-        if "residuals/res_rho" in f:
-            res_rho_hist = f["residuals/res_rho"][:]
-            res_mom_hist = f["residuals/res_mom"][:]
-            res_E_hist = f["residuals/res_E"][:]
-
         # 4. Summary Metrics
         total_impulse = f.attrs.get("total_impulse", 0.0)
         max_p_head = f.attrs.get("max_p_head", 0.0)
 
         print(f"Total Impulse: {total_impulse:.2f} Ns")
         print(f"Max Head Pressure: {max_p_head / 1e6:.2f} MPa")
-
-        # ---------------------------------------------------------
-        # 4. Post-Processing & Verification
-        # ---------------------------------------------------------
-        print(f"\nSimulation Complete (t = {solver.state.t:.4f} s)")
-
-        if not os.path.exists(config.output_filename):
-            print("Error: Output file not found.")
-            return
-
-        print(f"Fetching data from {config.output_filename}...")
-
-        with h5py.File(config.output_filename, "r") as f:
-            # 1. Load Spatial Data (Fields)
-            p_final = f["fields/pressure"][-1, :]
-            u_final = f["fields/velocity"][-1, :]
-
-            if "fields/mach" in f:
-                mach_final = f["fields/mach"][-1, :]
-            else:
-                mach_final = np.zeros_like(p_final)
-
-            # 2. Load Time-Series Data (Scalars)
-            t_hist = f["timeseries/time"][:]
-            p_head_hist = f["timeseries/p_head"][:]
-            thrust_hist = f["timeseries/thrust"][:]
-
-            # 3. Load Residuals (Found in 'timeseries' because they are scalars)
-            # We use .get() or check existence to be safe
-            res_rho_hist = None
-            if "timeseries/res_rho" in f:
-                print("Found residuals in 'timeseries' group.")
-                res_rho_hist = f["timeseries/res_rho"][:]
-                res_mom_hist = f["timeseries/res_mom"][:]
-                res_E_hist = f["timeseries/res_E"][:]
-            else:
-                print("Warning: Residuals not found in HDF5 file.")
-
-            # 4. Retrieve Summary Metrics
-            total_impulse = f.attrs.get("total_impulse", 0.0)
-            max_p_head = f.attrs.get("max_p_head", 0.0)
-
-            print(f"Total Impulse: {total_impulse:.2f} Ns")
-            print(f"Max Head Pressure: {max_p_head / 1e6:.2f} MPa")
 
         # --- Plotting ---
         fig1, ax = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
@@ -222,22 +165,6 @@ def main():
         ax_hist[1].grid(True, alpha=0.3)
 
         plt.tight_layout()
-
-        # Figure 3: Residuals
-        if res_rho_hist is not None:
-            fig3, ax_res = plt.subplots(figsize=(10, 5))
-
-            # Use semi-log plot for residuals
-            ax_res.semilogy(t_hist, res_rho_hist, label=r'Res($\rho$)', alpha=0.8)
-            ax_res.semilogy(t_hist, res_mom_hist, label=r'Res($\rho u$)', alpha=0.8)
-            ax_res.semilogy(t_hist, res_E_hist, label=r'Res($E$)', alpha=0.8)
-
-            ax_res.set_title('Solver Residuals (RMS of dU/dt)')
-            ax_res.set_ylabel('Residual Magnitude')
-            ax_res.set_xlabel('Time [s]')
-            ax_res.grid(True, which="both", alpha=0.3)
-            ax_res.legend()
-            plt.tight_layout()
 
         plt.show()
 

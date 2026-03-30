@@ -6,9 +6,6 @@ METRICS = {
         "time": {"unit": "s"},
         "max_burn_rate": {"unit": "m/s"},
         "propellant_volume": {"unit": "m^3"},
-        # Stability / Residual Metrics
-        "res_eikonal_avg": {"unit": "-"},  # Mean deviation from |grad(phi)|=1
-        "res_eikonal_max": {"unit": "-"},  # Max deviation (detects local kinks)
     },
     "fields": {
         # Derived fields can be added here
@@ -37,21 +34,6 @@ def compute_metrics(state, grid, cfg):
         dr, dtheta, dz = grid.dx
         dV = grid.polar_coords[0] * dr * dtheta * dz
         metrics["scalars"]["propellant_volume"] = np.sum(dV[is_propellant])
-
-    # 2. Stability / Residual Metrics (Eikonal Constraint)
-    # We measure how much |grad(phi)| deviates from 1.0
-    if hasattr(state, 'grad_mag'):
-        # Only evaluate on the interior to avoid Ghost Cell artifacts
-        gm_int = state.grad_mag[grid.interior]
-
-        # Calculate residual: | |grad(phi)| - 1 |
-        eikonal_resid = np.abs(gm_int - 1.0)
-
-        metrics["scalars"]["res_eikonal_avg"] = np.mean(eikonal_resid)
-        metrics["scalars"]["res_eikonal_max"] = np.max(eikonal_resid)
-    else:
-        metrics["scalars"]["res_eikonal_avg"] = 0.0
-        metrics["scalars"]["res_eikonal_max"] = 0.0
 
     return metrics
 

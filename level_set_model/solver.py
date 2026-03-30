@@ -64,7 +64,6 @@ class LSSolver:
 
         prop = pv.read(filename_prop).scale(self.cfg.file_scale)
         case = pv.read(filename_case).scale(self.cfg.file_scale)
-        # prop = prop.clip_surface(case, invert=True)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
         self.grid.pv_grid.point_data["casing"] = self.grid.pv_grid.point_data["implicit_distance"]
@@ -72,10 +71,8 @@ class LSSolver:
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(prop)
         self.grid.pv_grid.point_data["propellant"] = self.grid.pv_grid.point_data["implicit_distance"]
 
-        self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'),
-                                  dtype=self.cfg.dtype)
-        self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'),
-                                     dtype=self.cfg.dtype)
+        self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
+        self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
 
         self._get_geometry()
 
@@ -83,7 +80,6 @@ class LSSolver:
         self.state.br = self.state.br + self.cfg.br_initial
         self.state.t = 0.0
 
-        # Save initial state
         self.recorder.save()
         self._save_vtk()
 
