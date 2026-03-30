@@ -85,11 +85,11 @@ class LSSolver:
         self._save_vtk()
 
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
-        phi_full = self.state.phi
-        phi_full[self.grid.interior] = phi_interior
-        phi_full = apply_boundary_conditions(phi_full, self.grid.ng, self.bc_flag)
 
-        self.state.grad_mag = weno_godunov(phi_full, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
+        self.state.phi[self.grid.interior] = phi_interior
+        self.state.phi = apply_boundary_conditions(self.state.phi, self.grid.ng, self.bc_flag)
+
+        self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
 
         return -self.state.br[self.grid.interior] * self.state.grad_mag
 
