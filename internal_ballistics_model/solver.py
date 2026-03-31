@@ -49,20 +49,17 @@ class IBSolver:
         target_dtype = self.cfg.dtype
         z_grid = self.grid.cart_coords[2]
 
-        self.state.A = np.interp(z_grid, z, A).astype(target_dtype)
-        self.state.P = np.interp(z_grid, z, P).astype(target_dtype)
-        self.state.P_wetted = np.interp(z_grid, z, P_wetted).astype(target_dtype)
-        self.state.A_propellant = np.interp(z_grid, z, A_propellant).astype(target_dtype)
-        self.state.A_casing = np.interp(z_grid, z, A_casing).astype(target_dtype)
+        self.state.A[:] = np.interp(z_grid, z, A).astype(target_dtype)
+        self.state.P[:] = np.interp(z_grid, z, P).astype(target_dtype)
+        self.state.P_wetted[:] = np.interp(z_grid, z, P_wetted).astype(target_dtype)
+        self.state.A_propellant[:] = np.interp(z_grid, z, A_propellant).astype(target_dtype)
+        self.state.A_casing[:] = np.interp(z_grid, z, A_casing).astype(target_dtype)
 
         geom_arrays = [self.state.A, self.state.P, self.state.P_wetted, self.state.A_propellant, self.state.A_casing]
+
         for arr in geom_arrays:
             arr[:ng] = arr[ng]
             arr[-ng:] = arr[-ng - 1]
-
-        # 3. Calculate interface areas ONCE during geometry setup instead of inside the RHS loop
-        self.A_interfaces[:] = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
-                                      self.state.A[self.grid.ng: -self.grid.ng + 1])
 
 
     def initialize(self):
@@ -79,7 +76,6 @@ class IBSolver:
 
 
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
-
 
 
         # Call Numba, passing in the state primitives to be updated
