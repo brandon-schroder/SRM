@@ -14,21 +14,16 @@ METRICS = {
 
 
 def compute_metrics(state, grid, cfg):
-    """
-    Computes instantaneous performance metrics during the simulation.
-    """
     metrics = {
         "scalars": {},
         "fields": {}
     }
 
-    # 1. Physical Metrics
     if hasattr(state, 'br') and state.br.size > 0:
         metrics["scalars"]["max_burn_rate"] = np.max(state.br)
     else:
         metrics["scalars"]["max_burn_rate"] = 0.0
 
-    # Propellant Volume Integration: sum( r * dr * dtheta * dz ) where phi < 0
     if hasattr(state, 'phi'):
         is_propellant = state.phi < 0
         dr, dtheta, dz = grid.dx
@@ -39,9 +34,6 @@ def compute_metrics(state, grid, cfg):
 
 
 def compute_summary_stats(filename: str) -> dict:
-    """
-    Computes global summary metrics from the final HDF5 file.
-    """
     stats = {
         "final_time": 0.0,
         "steps_recorded": 0

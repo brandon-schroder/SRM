@@ -5,7 +5,6 @@ from typing import Tuple
 
 @dataclass
 class SimulationConfig:
-    """Static configuration parameters."""
     n_cells: int
     bounds: Tuple[float, float]
     ng: int = 3
@@ -13,25 +12,21 @@ class SimulationConfig:
     t_end: float = 1.0
     t_start: float = 0.0
 
-    # Initial & Boundary Conditions
     u_initial: float = 1.0
     t_initial: float = 288.15
     p_inf: float = 100.0E3
     t0_inlet: float = 288.15
     p0_inlet: float = 100.0e3
     br_initial: float = 1E-6
-    inlet_bc_type: str = "reflective"  # Options: "reflective", "characteristic", "transmissive"
-    outlet_bc_type: str = "characteristic"  # Options: "reflective", "characteristic", "transmissive"
+    inlet_bc_type: str = "reflective"
+    outlet_bc_type: str = "characteristic"
 
-    # Properties
     R: float = 287.0
     gamma: float = 1.4
 
-    # --- Propellant Physics ---
     rho_p: float = 1600.0
     Tf: float = 2888.0
 
-    # Base Burn Law (r = a * P^n)
     a_coef: float = 0.000035
     n_exp: float = 0.36
     burn_model: str = "none"
@@ -44,15 +39,11 @@ class SimulationConfig:
 
 @dataclass
 class FlowState:
-    """
-    Holds the evolving solution variables.
-    """
     n_cells: int
     t: float = 0.0
 
     dtype: np.dtype = np.float64
 
-    # Arrays
     U: np.ndarray = field(init=False)
     rho: np.ndarray = field(init=False)
     u: np.ndarray = field(init=False)

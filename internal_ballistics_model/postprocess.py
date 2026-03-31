@@ -1,7 +1,6 @@
 import numpy as np
 import h5py
 
-# Single Source of Truth for Metric Definitions
 METRICS = {
     "scalars": {
         "p_head": {"unit": "Pa"},
@@ -21,33 +20,24 @@ METRICS = {
 
 
 def compute_metrics(state, grid, cfg):
-    """
-    Computes instantaneous performance metrics during the simulation.
-    """
-    # 1. Setup Constants
     p_inf = getattr(cfg, "p_inf", 101325.0)
     g0 = 9.80665
 
-    # 2. Identify Indices (Boundary logic)
     idx_head = grid.ng
     idx_exit = -1 - grid.ng
 
-    # 3. Extract Primitive Variables
     p_head = state.p[idx_head]
     p_exit = state.p[idx_exit]
     u_exit = state.u[idx_exit]
     rho_exit = state.rho[idx_exit]
     area_exit = state.A[idx_exit]
 
-    # 4. Compute Mechanics
     m_dot = rho_exit * u_exit * area_exit
     thrust = m_dot * u_exit + (p_exit - p_inf) * area_exit
     isp = thrust / (m_dot * g0) if m_dot > 1e-9 else 0.0
 
-    # Field Calculation
     mach = state.u / (state.c + 1e-16)
 
-    # 5. Return Data
     return {
         "scalars": {
             "p_head": p_head,
@@ -63,9 +53,6 @@ def compute_metrics(state, grid, cfg):
 
 
 def compute_summary_stats(filename: str) -> dict:
-    """
-    Opens the finalized HDF5 file to compute global summary metrics.
-    """
     stats = {
         "total_impulse": 0.0,
         "max_p_head": 0.0,
@@ -81,12 +68,10 @@ def compute_summary_stats(filename: str) -> dict:
                     t = t_dset[:]
                     stats["num_steps"] = len(t)
 
-                    # Calculate Total Impulse
                     if "timeseries/thrust" in f:
                         F = f["timeseries/thrust"][:]
                         stats["total_impulse"] = np.trapezoid(F, x=t)
 
-                    # Calculate Peak Pressure
                     if "timeseries/p_head" in f:
                         p_head = f["timeseries/p_head"][:]
                         stats["max_p_head"] = np.max(p_head)

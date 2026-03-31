@@ -18,27 +18,21 @@ class LSSolver:
     def __init__(self, config: SimulationConfig):
         self.cfg = config
 
-        # 1. Build Grid
         self.grid = Grid3D(config)
 
-        # 2. Allocate State
         self.state = State(dims=self.grid.dims, dtype=self.cfg.dtype)
 
-        # 3. Initialize Solver State Variables
         self.bc_flag = BCType[self.cfg.bc_type.upper()].value
         self.step_count = 0
         self.dt = 0.0
         self.vtk_times = []
 
-        # Instantiate the integrator, pre-allocating memory for the interior level set field
         interior_shape = self.state.phi[self.grid.interior].shape
         self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
-        # 4. Initialize Recorder
         self.recorder = SimulationRecorder(
             solver=self,
             state_map={
-                # 1D Geometric Distributions
                 "x": {"attr": "x", "unit": "m"},
                 "A_flow": {"attr": "A_flow", "unit": "m^2"},
                 "A_casing": {"attr": "A_casing", "unit": "m^2"},
@@ -51,12 +45,10 @@ class LSSolver:
             summary_callback=compute_summary_stats
         )
 
-        # 5. VTK Output Setup
         self.vtk_dir = getattr(self.cfg, "vtk_dir", "vtk_output")
         if not os.path.exists(self.vtk_dir):
             os.makedirs(self.vtk_dir)
 
-        # 6. Initialize Solver
         self.initialize()
 
     def initialize(self):
@@ -84,6 +76,7 @@ class LSSolver:
         self.recorder.save()
         self._save_vtk()
 
+
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
 
         self.state.phi[self.grid.interior] = phi_interior
@@ -92,6 +85,7 @@ class LSSolver:
         self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
 
         return -self.state.br[self.grid.interior] * self.state.grad_mag
+
 
     def _get_geometry(self):
         z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = compute_geometric_distributions(
@@ -106,7 +100,7 @@ class LSSolver:
 
     def set_burn_rate(self, x: np.ndarray, br: np.ndarray):
         z_ls = self.grid.polar_coords[2]
-        self.state.br = np.interp(z_ls, x, br)
+        self.state.br[:] = np.interp(z_ls, x, br)
         return self.state.br
 
     def step(self) -> Tuple[float, float]:
@@ -129,19 +123,14 @@ class LSSolver:
 
         return dt, self.state.t
 
+
     def get_derived_quantities(self):
-        """
-        Called by SimulationRecorder to fetch derived metrics for logging.
-        """
         data = compute_metrics(self.state, self.grid, self.cfg)
         data["scalars"]["time"] = self.state.t
         return data
 
-    def _save_vtk(self):
-        """
-        Handles 3D visualization output separately from HDF5 logging.
-        """
 
+    def _save_vtk(self):
         vtk_name = f"step_{self.step_count:05d}.vtk"
         vtk_path = os.path.join(self.vtk_dir, vtk_name)
         self.vtk_times.append(self.state.t)
@@ -155,7 +144,6 @@ class LSSolver:
     def finalize(self):
         self.recorder.finalize()
 
-        # Generate VTK Series File
         series_path = os.path.join(self.vtk_dir, "results.vtk.series")
 
         series_data = {

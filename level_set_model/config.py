@@ -5,46 +5,37 @@ from pathlib import Path
 
 @dataclass
 class SimulationConfig:
-    """
-    Static configuration parameters.
-    """
-
     n_periodics: int
     size: tuple[int, int, int]
     bounds: list[float]
     file_prop: str | Path
     file_case: str | Path
-    file_scale: float = 1.0 # Meters as default
+    file_scale: float = 1.0
     ng: int = 3
 
     CFL: float = 0.8
     t_end: float = 1.0
     t_start: float = 0.0
 
-    # Initial & Boundary Conditions
     br_initial: float = 1.0E-6
     bc_type: str = "default"
 
     output_filename: str = "output.h5"
     vtk_dir: str = "vtk_output"
 
-    log_interval: int = 10  # Log 1D profiles every 10 steps
-    vtk_interval: int = 10  # Save 3D .vtk files every 100 steps
+    log_interval: int = 10
+    vtk_interval: int = 10
 
     dtype: np.dtype = np.float64
 
 
 @dataclass
 class State:
-    """
-    Holds the evolving solution variables.
-    """
     dims: tuple[int, int, int]
     t: float = 0.0
 
     dtype: np.dtype = np.float64
 
-    # Arrays
     phi: np.ndarray = field(init=False)
     casing: np.ndarray = field(init=False)
     grad_mag: np.ndarray = field(init=False)
@@ -57,7 +48,6 @@ class State:
     br: np.ndarray = field(init=False)
 
     def __post_init__(self):
-
         self.phi = np.zeros(self.dims, dtype=self.dtype)
         self.casing = np.zeros(self.dims, dtype=self.dtype)
         self.grad_mag = np.zeros(self.dims, dtype=self.dtype)

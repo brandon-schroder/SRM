@@ -5,7 +5,6 @@ from .config import *
 
 
 def lenoir_robillard(base_burn_rate, config: SimulationConfig, state: FlowState):
-
     alpha = 0.92E-5
     beta = 53.0
 
@@ -19,7 +18,6 @@ def lenoir_robillard(base_burn_rate, config: SimulationConfig, state: FlowState)
 
 
 def mukunda_paul(base_burn_rate, config: SimulationConfig, state: FlowState):
-
     rho_p = config.rho_p
     rho = state.rho
     u = np.maximum(abs(state.u), 1e-7)
@@ -54,7 +52,6 @@ class BurnModel(IntEnum):
     MP = 3
 
 def burn_rate_model(config: SimulationConfig, state: FlowState, model_flag):
-
     coefficient = config.a_coef
     exponent = config.n_exp
 

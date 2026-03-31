@@ -19,11 +19,9 @@ class IBSolver:
         self.step_count = 0
         self.dt = 0.0
 
-        # 2. Instantiate the integrator with the exact shape of the interior conserved variables array
         interior_shape = self.state.U[:, self.grid.interior].shape
         self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
-        # Pre-allocate array for face interfaces to avoid doing it in _compute_rhs
         self.A_interfaces = np.zeros(interior_shape[1] + 1, dtype=self.cfg.dtype)
 
         self.inlet_bc_flag = BCType[self.cfg.inlet_bc_type.upper()].value
@@ -76,9 +74,6 @@ class IBSolver:
 
 
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
-
-
-        # Call Numba, passing in the state primitives to be updated
         rhs_out = rhs_numerics(
             U_interior,self.state.U,self.state.A,self.cfg.gamma,self.cfg.R,
             self.cfg.p0_inlet, self.cfg.t0_inlet,self.cfg.p_inf,self.grid.ng,self.inlet_bc_flag, self.outlet_bc_flag,

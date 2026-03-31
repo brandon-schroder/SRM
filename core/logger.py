@@ -13,7 +13,6 @@ class HDF5Logger:
         self.units = units or {}
         self.default_dtype = dtype
 
-        # 1. Keep file open persistently
         self.file = h5py.File(self.filename, "w", libver='latest')
         self.file.create_group("timeseries")
         self.file.create_group("fields")
@@ -21,7 +20,6 @@ class HDF5Logger:
         if config:
             self._save_config(self.file, config)
 
-        # 4. Enable SWMR for crash robustness and live-viewing
         self.file.swmr_mode = True
 
     def log(self, name, value):
@@ -43,7 +41,6 @@ class HDF5Logger:
                 base_shape = data.shape[1:]
                 max_shape = (None,) + base_shape
 
-                # 3. Explicit chunking aligned with buffer size
                 chunk_shape = (self.buffer_size,) + base_shape if base_shape else (self.buffer_size,)
 
                 dset = group.create_dataset(
@@ -51,7 +48,7 @@ class HDF5Logger:
                     shape=(0,) + base_shape,
                     maxshape=max_shape,
                     dtype=self.default_dtype,
-                    compression="lzf",  # 2. Faster compression
+                    compression="lzf",
                     chunks=chunk_shape
                 )
                 if name in self.units:
@@ -64,7 +61,6 @@ class HDF5Logger:
 
         self.buffer.clear()
 
-        # Manually flush the HDF5 internal buffers to disk
         self.file.flush()
 
     def _save_config(self, f, config_obj):
@@ -97,7 +93,6 @@ class SimulationRecorder(HDF5Logger):
         self.metrics_def = metrics_def or {}
         self.summary_callback = summary_callback
 
-        # Collect units
         units = {k: v.get("unit", "") for k, v in self.state_map.items()}
         for cat in self.metrics_def.values():
             for k, v in cat.items(): units[k] = v.get("unit", "")
@@ -107,24 +102,21 @@ class SimulationRecorder(HDF5Logger):
             filename=getattr(solver.cfg, 'output_filename', 'output.h5'),
             config=getattr(solver, 'cfg', None),
             units=units,
-            dtype=getattr(solver.cfg, 'dtype', np.float32)  # Inherit solver precision
+            dtype=getattr(solver.cfg, 'dtype', np.float32)
         )
 
         if geometry_callback:
             geometry_callback(self.filename, solver)
 
     def save(self):
-        # 1. Log Time & DT
         self.log("time", self.solver.state.t)
         self.log("dt", self.solver.dt)
 
-        # 2. Log State Fields
         for name, meta in self.state_map.items():
             val = getattr(self.solver.state, meta["attr"], None)
             if val is not None:
                 self.log(name, val)
 
-        # 3. Log Metrics
         if hasattr(self.solver, "get_derived_quantities"):
             derived = self.solver.get_derived_quantities()
             for cat in derived.values():

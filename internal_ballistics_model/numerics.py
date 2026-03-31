@@ -37,7 +37,6 @@ hf = gamma / (gamma - 1) * R * Tf
 
 @njit(cache=True)
 def primitives_to_conserved(rho, u, p, A, gamma):
-
     U = np.zeros((3, len(rho)))
 
     U[0, :] = rho * A
@@ -49,7 +48,6 @@ def primitives_to_conserved(rho, u, p, A, gamma):
 
 @njit(cache=True)
 def conserved_to_primitives(U, A, gamma):
-
     rho = U[0, :] / A
     u = U[1, :] / U[0, :]
     p = (U[2, :] / A - 0.5 * rho * u ** 2) * (gamma - 1)
@@ -60,10 +58,6 @@ def conserved_to_primitives(U, A, gamma):
 
 @njit(fastmath=True, cache=True, parallel=True)
 def flux(U, A, rho, u, p):
-    """
-    JIT-compiled, array-wise flux calculation.
-    Uses pre-computed primitive variables.
-    """
     F = np.zeros_like(U)
 
     F[0, :] = rho * u * A
@@ -75,11 +69,6 @@ def flux(U, A, rho, u, p):
 
 @njit(cache=True, parallel=True)
 def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
-    """
-    Well-balanced source term.
-    Uses interface area differences to balance the pressure flux.
-    """
-
     S = np.zeros((3, p.shape[0]))
 
     uf = (rho_p * br * R * Tf) / p
@@ -94,10 +83,6 @@ def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
 
 @njit(fastmath=True, cache=True, parallel=True)
 def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
-    """
-    WENO-HLLC numerical flux with Correct Area Scaling.
-    """
-
     num_comp, n_tot = U.shape
     nc = n_tot - 2 * ng
 
@@ -106,10 +91,8 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
     for i in prange(nc + 1):
         ii = i + ng - 1
 
-        # 1. Calculate the EXACT same interface area used in the source term
         A_int = A[i]
 
-        # 2. Reconstruct Primitives
         rho_L = weno_left(rho[ii - 2], rho[ii - 1], rho[ii], rho[ii + 1], rho[ii + 2], rho[ii + 3])
         u_L   = weno_left(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
         p_L   = weno_left(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
@@ -118,14 +101,11 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
         u_R   = weno_right(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
         p_R   = weno_right(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
 
-        # Safety constraints
         rho_L, rho_R = max(rho_L, 1e-6), max(rho_R, 1e-6)
         p_L, p_R = max(p_L, 1e-6), max(p_R, 1e-6)
 
-        # 3. Compute HLLC Flux (per unit area)
         F_hllc = hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma)
 
-        # 4. Apply Interface Area HERE
         F_hat[0, i] = F_hllc[0] * A_int
         F_hat[1, i] = F_hllc[1] * A_int
         F_hat[2, i] = F_hllc[2] * A_int
@@ -135,10 +115,6 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
 
 @njit(fastmath=True, cache=True)
 def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
-    """
-    Computes HLLC flux for the Quasi-1D Euler equations.
-    Flux is scaled by the interface Area (A_int).
-    """
     # 1. Compute Enthalpy and Sound Speed
     e_L = p_L / ((gamma - 1) * rho_L)
     E_L = e_L + 0.5 * u_L ** 2
@@ -206,7 +182,6 @@ def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
 
 @njit(cache=True)
 def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
-
     precision = U.dtype.type
     eps = precision(1e-12)
 

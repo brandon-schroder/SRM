@@ -4,14 +4,9 @@ from numba import njit, prange
 from core.wenos import weno5_left as weno_left
 from core.wenos import weno5_right as weno_right
 
-# =============================================================================
-# NUMBA-COMPILED WENO GODUNOV UPWINDING
-# =============================================================================
 
 @njit(fastmath=True, cache=True, parallel=True)
 def weno_godunov(phi, dx, r_coords, ng=3):
-    """Compute WENO Godunov upwinding on physical domain"""
-
     nr_full, ntheta_full, nz_full = phi.shape
     nr = nr_full - 2 * ng
     ntheta = ntheta_full - 1
@@ -25,15 +20,13 @@ def weno_godunov(phi, dx, r_coords, ng=3):
     D_theta = np.asfortranarray(np.empty((nr, ntheta, nz), dtype=phi.dtype))
     D_z = np.asfortranarray(np.empty((nr, ntheta, nz), dtype=phi.dtype))
 
-
-    for k in prange(nz):         # Outer
-        for j in prange(ntheta): # Middle
-            for i in prange(nr): # Inner (Fastest memory access)
+    for k in prange(nz):
+        for j in prange(ntheta):
+            for i in prange(nr):
 
                 ii = i + ng
                 kk = k + ng
 
-                # Periodic indexing for theta
                 jm3 = (j - 3) % ntheta
                 jm2 = (j - 2) % ntheta
                 jm1 = (j - 1) % ntheta
@@ -41,7 +34,6 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                 jp2 = (j + 2) % ntheta
                 jp3 = (j + 3) % ntheta
 
-                # WENO reconstruction (r)
                 f_m_r = weno_left(
                     phi[ii - 3, j, kk], phi[ii - 2, j, kk], phi[ii - 1, j, kk],
                     phi[ii, j, kk], phi[ii + 1, j, kk], phi[ii + 2, j, kk])
@@ -49,7 +41,6 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                     phi[ii - 2, j, kk], phi[ii - 1, j, kk], phi[ii, j, kk],
                     phi[ii + 1, j, kk], phi[ii + 2, j, kk], phi[ii + 3, j, kk])
 
-                # WENO reconstruction (theta)
                 f_m_t = weno_left(
                     phi[ii, jm3, kk], phi[ii, jm2, kk], phi[ii, jm1, kk],
                     phi[ii, j, kk], phi[ii, jp1, kk], phi[ii, jp2, kk])
@@ -57,7 +48,6 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                     phi[ii, jm2, kk], phi[ii, jm1, kk], phi[ii, j, kk],
                     phi[ii, jp1, kk], phi[ii, jp2, kk], phi[ii, jp3, kk])
 
-                # WENO reconstruction (z)
                 f_m_z = weno_left(
                     phi[ii, j, kk - 3], phi[ii, j, kk - 2], phi[ii, j, kk - 1],
                     phi[ii, j, kk], phi[ii, j, kk + 1], phi[ii, j, kk + 2])
@@ -65,15 +55,12 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                     phi[ii, j, kk - 2], phi[ii, j, kk - 1], phi[ii, j, kk],
                     phi[ii, j, kk + 1], phi[ii, j, kk + 2], phi[ii, j, kk + 3])
 
-                # Godunov upwinding (r)
                 D_m_r = (phi[ii, j, kk] - f_m_r) / dr_half
                 D_p_r = (f_p_r - phi[ii, j, kk]) / dr_half
 
-                # Godunov upwinding (theta) (scaled by r for cylindrical)
                 D_m_t = (phi[ii, j, kk] - f_m_t) / (dt_half * r_coords[ii, j, kk])
                 D_p_t = (f_p_t - phi[ii, j, kk]) / (dt_half * r_coords[ii, j, kk])
 
-                # Godunov upwinding (z)
                 D_m_z = (phi[ii, j, kk] - f_m_z) / dz_half
                 D_p_z = (f_p_z - phi[ii, j, kk]) / dz_half
 
@@ -81,35 +68,19 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                 D_theta[i, j, k] = max(D_m_t, 0.0) ** 2 + min(D_p_t, 0.0) ** 2
                 D_z[i, j, k] = max(D_m_z, 0.0) ** 2 + min(D_p_z, 0.0) ** 2
 
-    return np.sqrt(D_r + D_theta + D_z) # -|∇φ|_Godunov
+    return np.sqrt(D_r + D_theta + D_z)
 
-
-# =============================================================================
-# ADAPTIVE TIMESTEP COMPUTATION
-# =============================================================================
 
 @njit(fastmath=True, cache=True, parallel=True)
 def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
-
-    """
-    Physically accurate and fast adaptive timestep for cylindrical level-set
-    φ_t = -br * |∇φ| with directionally split CFL in (r, θ, z).
-
-    Optimisation: instead of looping over every cell, we only need the
-    maximum |∇φ| in each radial shell i — the θ-resolution restriction is
-    the same for the entire shell.
-
-    """
     precision = grad_mag.dtype.type
     eps = precision(1e-12)
 
     nr, ntheta, nz = grad_mag.shape
     dr, dtheta, dz = dx
 
-    # Physical r-coordinates for each radial index (shape: nr,)
-    r_physical = r_coords[ng:-ng, 0, ng]        # assuming r independent of θ,z
+    r_physical = r_coords[ng:-ng, 0, ng]
 
-    # Pre-compute maximum |∇φ| in each radial layer (nr values)
     max_grad_per_r = np.zeros(nr, dtype=grad_mag.dtype)
     for i in prange(nr):
         max_val = 0.0
@@ -119,23 +90,21 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
                     max_val = grad_mag[i, j, k]
         max_grad_per_r[i] = max_val
 
-    dt_min = 1e20  # very large initial value
+    dt_min = 1e20
 
     for i in range(nr):
         r_i = r_physical[i]
         max_grad_i = max_grad_per_r[i]
 
         if max_grad_i < eps:
-            continue                                    # nothing moving here
+            continue
 
-        wave_speed = br.max()                                 # local max propagation speed
+        wave_speed = br.max()
 
-        # Effective grid spacing in θ-direction at this radius
         h_theta = r_i * dtheta
-        if h_theta < eps:                             # protect axis (if present)
-            h_theta = dr * 0.5                          # treat as Cartesian near r=0
+        if h_theta < eps:
+            h_theta = dr * 0.5
 
-        # Directional CFL limits
         dt_r     = dr     / wave_speed
         dt_theta = h_theta / wave_speed
         dt_z     = dz     / wave_speed
@@ -145,20 +114,15 @@ def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
         if dt_local < dt_min:
             dt_min = dt_local
 
-    # Calculate minimum stable timestep
     dt_stable = CFL * dt_min
 
-    # Global safety caps
     dt_stable = min(max(dt_stable, eps), 0.1)
 
-    # Do not overshoot the final time
     t_remaining = t_end - t
 
-    # If the time remaining is too small, or overshoots, return dt=0
     if t_remaining <= eps or t_remaining < 0:
         return 0.0
 
-    # Prevents small timesteps near t_end
     if t_remaining <= dt_stable:
         dt = t_remaining
     elif t_remaining < 2.0 * dt_stable:
