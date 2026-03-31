@@ -2,88 +2,74 @@ import numpy as np
 from numba import njit
 from enum import IntEnum
 
+
 @njit(fastmath=True, cache=True)
 def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
-    i0 = ng
+    i_int = ng
 
-    rho_int = U[0, i0] / A[i0]
-    u_int = U[1, i0] / U[0, i0]
-    p_int = (gamma - 1.0) * (U[2, i0] / A[i0] - 0.5 * rho_int * u_int * u_int)
+    rho_int = U[0, i_int] / A[i_int]
+    u_int = U[1, i_int] / U[0, i_int]
+    p_int = (gamma - 1.0) * (U[2, i_int] / A[i_int] - 0.5 * rho_int * u_int ** 2)
     p_int = max(p_int, 1e-8)
     c_int = np.sqrt(gamma * p_int / rho_int)
 
-    M_guess = 0.3
+    J_minus = u_int - 2.0 * c_int / (gamma - 1.0)
 
-    T_static = t0 / (1.0 + 0.5 * (gamma - 1.0) * M_guess ** 2)
-    p_static = p0 * (T_static / t0) ** (gamma / (gamma - 1.0))
-    rho_static = p_static / (R * T_static)
-    c_static = np.sqrt(gamma * p_static / rho_static)
-    u_static = M_guess * c_static
+    c0 = np.sqrt(gamma * R * t0)
+
+    a_quad = (gamma + 1.0) / 4.0
+    b_quad = -J_minus * (gamma - 1.0) / 2.0
+    c_quad = ((gamma - 1.0) / 4.0) * (J_minus ** 2) - c0 ** 2
+
+    discriminant = b_quad ** 2 - 4.0 * a_quad * c_quad
+
+    u_b = (-b_quad + np.sqrt(max(0.0, discriminant))) / (2.0 * a_quad)
+    u_b = max(0.0, u_b)
+
+    c_b = (gamma - 1.0) / 2.0 * (u_b - J_minus)
+
+    t_b = (c_b ** 2) / (gamma * R)
+    p_b = p0 * (t_b / t0) ** (gamma / (gamma - 1.0))
+    rho_b = p_b / (R * t_b)
+    e_b = p_b / (gamma - 1.0) + 0.5 * rho_b * u_b ** 2
 
     for i in range(ng):
-
-        weight = float(ng - i) / float(ng + 1)
-
-        rho_blend = weight * rho_static + (1.0 - weight) * rho_int
-        u_blend = weight * u_static + (1.0 - weight) * u_int
-        p_blend = weight * p_static + (1.0 - weight) * p_int
-
-        e_blend = p_blend / (gamma - 1.0) + 0.5 * rho_blend * u_blend ** 2
-
-        U[0, i] = rho_blend * A[i]
-        U[1, i] = rho_blend * u_blend * A[i]
-        U[2, i] = e_blend * A[i]
+        U[0, i] = rho_b * A[i]
+        U[1, i] = rho_b * u_b * A[i]
+        U[2, i] = e_b * A[i]
 
     return U
 
 
 @njit(fastmath=True, cache=True)
-def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_back, ng):
+def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
     N = U.shape[1]
-    im1 = N - ng - 1
+    i_int = N - ng - 1
 
-    rho_int = U[0, im1] / A[im1]
-
-    if rho_int < 1e-9:
-        rho_int = 1e-9
-
-    u_int = U[1, im1] / U[0, im1]
-
-    p_int = (gamma - 1.0) * (U[2, im1] / A[im1] - 0.5 * rho_int * u_int ** 2)
-    p_int = max(p_int, 1e-9)
-
+    rho_int = U[0, i_int] / A[i_int]
+    u_int = U[1, i_int] / U[0, i_int]
+    p_int = (gamma - 1.0) * (U[2, i_int] / A[i_int] - 0.5 * rho_int * u_int ** 2)
     c_int = np.sqrt(gamma * p_int / rho_int)
-    M_int = abs(u_int) / c_int
 
-    rho_g, u_g, p_g = rho_int, u_int, p_int
+    mach_int = np.abs(u_int) / c_int
 
-    if M_int < 1.0:
-
+    if mach_int >= 1.0:
+        rho_b, u_b, p_b = rho_int, u_int, p_int
+    else:
         J_plus = u_int + 2.0 * c_int / (gamma - 1.0)
 
         s_int = p_int / (rho_int ** gamma)
 
-        p_g = p_back
+        p_b = p_inf
+        rho_b = (p_b / s_int) ** (1.0 / gamma)
+        c_b = np.sqrt(gamma * p_b / rho_b)
+        u_b = J_plus - 2.0 * c_b / (gamma - 1.0)
 
-        rho_g = (p_g / s_int) ** (1.0 / gamma)
-        rho_g = max(rho_g, 1e-9)
-
-        c_g = np.sqrt(gamma * p_g / rho_g)
-
-        u_g = J_plus - 2.0 * c_g / (gamma - 1.0)
-
-        u_g = max(u_g, 0.0)
-
-    else:
-        pass
-
-    e_g = p_g / (gamma - 1.0) + 0.5 * rho_g * u_g ** 2
-
+    e_b = p_b / (gamma - 1.0) + 0.5 * rho_b * u_b ** 2
     for i in range(N - ng, N):
-
-        U[0, i] = rho_g * A[i]
-        U[1, i] = rho_g * u_g * A[i]
-        U[2, i] = e_g * A[i]
+        U[0, i] = rho_b * A[i]
+        U[1, i] = rho_b * u_b * A[i]
+        U[2, i] = e_b * A[i]
 
     return U
 
