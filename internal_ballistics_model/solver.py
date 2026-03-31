@@ -29,6 +29,8 @@ class IBSolver:
         self.inlet_bc_flag = BCType[self.cfg.inlet_bc_type.upper()].value
         self.outlet_bc_flag = BCType[self.cfg.outlet_bc_type.upper()].value
 
+        self.burn_model_flag = BurnModel[self.cfg.burn_model.upper()].value
+
         self.recorder = SimulationRecorder(
             solver=self,
             state_map={
@@ -62,7 +64,6 @@ class IBSolver:
         self.A_interfaces[:] = 0.5 * (self.state.A[self.grid.ng - 1: -self.grid.ng] +
                                       self.state.A[self.grid.ng: -self.grid.ng + 1])
 
-        # NOTE: dAdz is no longer pre-calculated here to ensure well-balanced source terms.
 
     def initialize(self):
         self.state.rho[:] = self.cfg.p_inf / (self.cfg.R * self.cfg.t_initial)
@@ -79,8 +80,7 @@ class IBSolver:
 
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
 
-        # Calculate burn rate outside
-        self.state.br = burn_rate_model(self.cfg, self.state, model=self.cfg.erosive_model)
+
 
         # Call Numba, passing in the state primitives to be updated
         rhs_out = rhs_numerics(
@@ -96,6 +96,9 @@ class IBSolver:
         self.dt = adaptive_timestep(
             self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma,
             self.grid.dx[2], self.grid.ng, self.state.t, self.cfg.t_end)
+
+        if self.step_count % self.cfg.burn_rate_update_interval == 0:
+            self.state.br = burn_rate_model(self.cfg, self.state, model_flag=self.burn_model_flag)
 
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 

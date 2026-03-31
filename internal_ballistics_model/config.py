@@ -34,7 +34,8 @@ class SimulationConfig:
     # Base Burn Law (r = a * P^n)
     a_coef: float = 0.000035
     n_exp: float = 0.36
-    erosive_model: str = "none"
+    burn_model: str = "none"
+    burn_rate_update_interval: int = 1
 
     output_filename: str = "internal_ballistics.h5"
     log_interval: int = 10
