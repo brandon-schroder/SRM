@@ -12,8 +12,9 @@ def main():
     # ---------------------------------------------------------
     # 1. Configuration
     # ---------------------------------------------------------
-    prop_file = Path("geometry/07R-SRM-Propellant.STL")
-    case_file = Path("geometry/07R-SRM-Casing.STL")
+    base_path = Path(__file__).parent
+    prop_file = base_path / "geometry" / "07R-SRM-Propellant.STL"
+    case_file = base_path / "geometry" / "07R-SRM-Casing.STL"
 
     # Domain bounds: [r_min, r_max, theta_min, theta_max, z_min, z_max]
     # Adjust z bounds to match your geometry scaling
@@ -21,7 +22,7 @@ def main():
     br_initial = 10e-3
 
     # Dummy Burn Rate Distribution (Uniform)
-    x_ib = np.linspace(bounds[4], bounds[5], 100)
+    x_ib = np.linspace(bounds[4], bounds[5], 300)
     br_ib = np.ones_like(x_ib) * br_initial
 
     config = SimulationConfig(
@@ -37,7 +38,8 @@ def main():
         br_initial=br_initial,
         output_filename="level_set_results.h5",
         vtk_dir="vtk_output",
-        vtk_interval=100
+        vtk_interval=100,
+        log_interval=10,
     )
 
     config.dtype = np.float32
