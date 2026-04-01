@@ -81,7 +81,7 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
     for i in range(ng):
         i_mirror = i0 + (ng - 1 - i)
 
-        U[0, i] =  U[0, i_mirror] * A[i] / A[i_mirror]  
+        U[0, i] =  U[0, i_mirror] * A[i] / A[i_mirror]
         U[1, i] = -U[1, i_mirror] * A[i] / A[i_mirror]
         U[2, i] =  U[2, i_mirror] * A[i] / A[i_mirror]
 

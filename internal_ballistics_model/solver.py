@@ -23,6 +23,9 @@ class IBSolver:
         self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
         self.A_interfaces = np.zeros(interior_shape[1] + 1, dtype=self.cfg.dtype)
+        self.F_hat = np.zeros((3, interior_shape[1] + 1), dtype=self.cfg.dtype)
+        self.S = np.zeros((3, interior_shape[1]), dtype=self.cfg.dtype)
+        self.rhs_out = np.zeros((3, interior_shape[1]), dtype=self.cfg.dtype)
 
         self.inlet_bc_flag = BCType[self.cfg.inlet_bc_type.upper()].value
         self.outlet_bc_flag = BCType[self.cfg.outlet_bc_type.upper()].value
@@ -59,33 +62,35 @@ class IBSolver:
             arr[:ng] = arr[ng]
             arr[-ng:] = arr[-ng - 1]
 
-
     def initialize(self):
         self.state.rho[:] = self.cfg.p_inf / (self.cfg.R * self.cfg.t_initial)
         self.state.p[:] = self.cfg.p_inf
         self.state.u[:] = self.cfg.u_initial
-        self.state.br[:] = self.cfg.br_initial  # simplified initialization
+        self.state.br[:] = self.cfg.br_initial
 
-        self.state.U[:] = primitives_to_conserved(self.state.rho, self.state.u, self.state.p, self.state.A,
-                                                  self.cfg.gamma)
+        self.state.U = primitives_to_conserved(
+            self.state.rho, self.state.u, self.state.p,
+            self.state.A, self.cfg.gamma, self.state.U)
+
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
 
         self.recorder.save()
 
-
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
         rhs_out = rhs_numerics(
-            U_interior,self.state.U,self.state.A,self.cfg.gamma,self.cfg.R,
-            self.cfg.p0_inlet, self.cfg.t0_inlet,self.cfg.p_inf,self.grid.ng,self.inlet_bc_flag, self.outlet_bc_flag,
-            self.cfg.rho_p, self.cfg.Tf, self.state.br, self.state.P, self.grid.dx[2],
-            self.state.rho, self.state.u, self.state.p, self.state.c
+            U_interior, self.state.U, self.state.A, self.cfg.gamma, self.cfg.R,
+            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.grid.ng,
+            self.inlet_bc_flag, self.outlet_bc_flag, self.cfg.rho_p, self.cfg.Tf,
+            self.state.br, self.state.P, self.grid.dx[2],
+            self.state.rho, self.state.u, self.state.p, self.state.c,
+            self.A_interfaces, self.F_hat, self.S, self.rhs_out
         )
 
         return rhs_out
 
     def step(self) -> Tuple[float, float]:
         self.dt = adaptive_timestep(
-            self.cfg.CFL, self.state.U, self.state.A, self.cfg.gamma,
+            self.cfg.CFL, self.state.u, self.state.c,
             self.grid.dx[2], self.grid.ng, self.state.t, self.cfg.t_end)
 
         if self.step_count % self.cfg.burn_rate_update_interval == 0:

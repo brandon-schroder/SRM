@@ -6,7 +6,6 @@ from .boundary import apply_boundary_jit
 
 
 """
-
 Conserved Vector: U
 U(1) = rho * A
 U(2) = rho * u * A
@@ -33,58 +32,49 @@ hf = gamma / (gamma - 1) * R * Tf
 """
 
 
-@njit(cache=True)
-def primitives_to_conserved(rho, u, p, A, gamma):
-    U = np.zeros((3, len(rho)))
-
-    U[0, :] = rho * A
-    U[1, :] = rho * u * A
-    U[2, :] = (p / (gamma - 1) + 0.5 * rho * u ** 2) * A
-
+@njit(cache=True, parallel=True)
+def primitives_to_conserved(rho, u, p, A, gamma, U):
+    for i in prange(len(rho)):
+        U[0, i] = rho[i] * A[i]
+        U[1, i] = rho[i] * u[i] * A[i]
+        U[2, i] = (p[i] / (gamma - 1) + 0.5 * rho[i] * u[i] ** 2) * A[i]
     return U
 
 
-@njit(cache=True)
-def conserved_to_primitives(U, A, gamma):
-    rho = U[0, :] / A
-    u = U[1, :] / U[0, :]
-    p = (U[2, :] / A - 0.5 * rho * u ** 2) * (gamma - 1)
-    c = np.sqrt(gamma * p / rho)
-
+@njit(fastmath=True, cache=True, parallel=True)
+def conserved_to_primitives(U, A, gamma, rho, u, p, c):
+    for i in prange(U.shape[1]):
+        rho[i] = U[0, i] / A[i]
+        u[i]   = U[1, i] / U[0, i]
+        p[i]   = (U[2, i] / A[i] - 0.5 * rho[i] * u[i] ** 2) * (gamma - 1)
+        c[i]   = np.sqrt(gamma * p[i] / rho[i])
     return rho, u, p, c
 
 
 @njit(fastmath=True, cache=True, parallel=True)
-def flux(U, A, rho, u, p):
-    F = np.zeros_like(U)
-
-    F[0, :] = rho * u * A
-    F[1, :] = (rho * u ** 2 + p) * A
-    F[2, :] = (U[2, :] / A + p) * u * A
-
+def flux(U, A, rho, u, p, F):
+    for i in prange(U.shape[1]):
+        F[0, i] = rho[i] * u[i] * A[i]
+        F[1, i] = (rho[i] * u[i] ** 2 + p[i]) * A[i]
+        F[2, i] = (U[2, i] / A[i] + p[i]) * u[i] * A[i]
     return F
 
 
-@njit(fastmath=True,cache=True, parallel=True)
-def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
-    S = np.zeros((3, p.shape[0]))
-
-    uf = (rho_p * br * R * Tf) / p
+@njit(fastmath=True, cache=True, parallel=True)
+def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz, S):
     hf = gamma / (gamma - 1) * R * Tf
-
-    S[0, :] = rho_p * br * P_propellant
-    S[1, :] = p * ((A_interfaces[1:] - A_interfaces[:-1]) / dz)
-    S[2, :] = rho_p * br * P_propellant * (hf + 1/2 * uf ** 2)
-
+    for i in prange(p.shape[0]):
+        uf = (rho_p * br[i] * R * Tf) / p[i]
+        S[0, i] = rho_p * br[i] * P_propellant[i]
+        S[1, i] = p[i] * ((A_interfaces[i+1] - A_interfaces[i]) / dz)
+        S[2, i] = rho_p * br[i] * P_propellant[i] * (hf + 0.5 * uf ** 2)
     return S
 
 
 @njit(fastmath=True, cache=True, parallel=True)
-def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
+def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng, F_hat):
     num_comp, n_tot = U.shape
     nc = n_tot - 2 * ng
-
-    F_hat = np.zeros((num_comp, nc + 1))
 
     for i in prange(nc + 1):
         ii = i + ng - 1
@@ -179,10 +169,8 @@ def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
     return f0, f1, f2
 
 
-@njit(fastmath=True,cache=True)
-def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
-    rho, u, p, c = conserved_to_primitives(U, A, gamma)
-
+@njit(fastmath=True, cache=True)
+def adaptive_timestep(CFL, u, c, dz, ng, t, t_end):
     smax = np.max(np.abs(u[ng:-ng]) + c[ng:-ng])
     dt_stable = CFL * dz / (smax + 1e-12)
 
@@ -192,42 +180,26 @@ def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
     return dt_stable
 
 
-@njit(cache=True)
+@njit(fastmath=True, cache=True)
 def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng,
-                         inlet_bc, outlet_bc, rho_p, Tf, br, P_propellant, dz,
-                         rho_out, u_out, p_out, c_out):
+                 inlet_bc, outlet_bc, rho_p, Tf, br, P_propellant, dz,
+                 rho_out, u_out, p_out, c_out, A_interfaces, F_hat, S, rhs_out):
     nc = U_interior.shape[1]
 
-    # 1. Update interior
     for i in range(3):
         for j in range(nc):
             U_full[i, j + ng] = U_interior[i, j]
 
-    # 2. Compute interface areas internally
-    A_interfaces = np.zeros(nc + 1)
     for i in range(nc + 1):
         A_interfaces[i] = 0.5 * (A[ng - 1 + i] + A[ng + i])
 
-    # 3. Apply Boundaries (Write back to U_full in-place)
-    U_bound = apply_boundary_jit(U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng, inlet_bc, outlet_bc)
-    for i in range(3):
-        for j in range(U_full.shape[1]):
-            U_full[i, j] = U_bound[i, j]
+    U_full = apply_boundary_jit(U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng, inlet_bc, outlet_bc)
 
-    # 4. Primitives (Write directly to Python's memory in-place!)
-    rho_temp, u_temp, p_temp, c_temp = conserved_to_primitives(U_full, A, gamma)
-    for j in range(rho_temp.shape[0]):
-        rho_out[j] = rho_temp[j]
-        u_out[j] = u_temp[j]
-        p_out[j] = p_temp[j]
-        c_out[j] = c_temp[j]
+    rho_out, u_out, p_out, c_out = conserved_to_primitives(U_full, A, gamma, rho_out, u_out, p_out, c_out)
 
-    # 5. Compute Fluxes and Sources
-    F_hat = compute_numerical_flux(U_full, A_interfaces, rho_out, u_out, p_out, c_out, gamma, ng)
-    S = source(rho_p, Tf, br[ng:-ng], R, gamma, p_out[ng:-ng], P_propellant[ng:-ng], A_interfaces, dz)
+    F_hat = compute_numerical_flux(U_full, A_interfaces, rho_out, u_out, p_out, c_out, gamma, ng, F_hat)
+    S = source(rho_p, Tf, br[ng:-ng], R, gamma, p_out[ng:-ng], P_propellant[ng:-ng], A_interfaces, dz, S)
 
-    # 6. Final Assembly
-    rhs_out = np.empty((3, nc))
     for i in range(3):
         for j in range(nc):
             rhs_out[i, j] = S[i, j] - (F_hat[i, j + 1] - F_hat[i, j]) / dz
