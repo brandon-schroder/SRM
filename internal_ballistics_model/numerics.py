@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit, prange
 
-from core.wenos import weno3_left as weno_left, weno3_right as weno_right
+from core.spatial_reconstruction import weno3_left as weno_left, weno3_right as weno_right
 from .boundary import apply_boundary_jit
 
 

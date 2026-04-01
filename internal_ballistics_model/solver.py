@@ -8,7 +8,7 @@ from .config import *
 from .postprocess import *
 
 from core.logger import *
-from core.time_integrators import SSPRK33LowStorage as rk_step
+from core.temporal_integration import SSPRK33LowStorage as rk_step
 
 
 class IBSolver:

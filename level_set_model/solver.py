@@ -10,7 +10,7 @@ from .geometry import *
 from .boundary import *
 from .postprocess import *
 
-from core.time_integrators import SSPRK33LowStorage as rk_step
+from core.temporal_integration import SSPRK33LowStorage as rk_step
 from core.logger import SimulationRecorder
 
 
