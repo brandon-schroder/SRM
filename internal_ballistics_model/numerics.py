@@ -6,8 +6,6 @@ from .boundary import apply_boundary_jit
 
 
 """
-Optimized WENO3 Quasi-1D Nozzle Solver with Numba JIT compilation
-(fastmath=True, cache=True, and primitive pre-calculation)
 
 Conserved Vector: U
 U(1) = rho * A
@@ -67,7 +65,7 @@ def flux(U, A, rho, u, p):
     return F
 
 
-@njit(cache=True, parallel=True)
+@njit(fastmath=True,cache=True, parallel=True)
 def source(rho_p, Tf, br, R, gamma, p, P_propellant, A_interfaces, dz):
     S = np.zeros((3, p.shape[0]))
 
@@ -104,18 +102,17 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng):
         rho_L, rho_R = max(rho_L, 1e-6), max(rho_R, 1e-6)
         p_L, p_R = max(p_L, 1e-6), max(p_R, 1e-6)
 
-        F_hllc = hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma)
+        f0, f1, f2 = hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma)
 
-        F_hat[0, i] = F_hllc[0] * A_int
-        F_hat[1, i] = F_hllc[1] * A_int
-        F_hat[2, i] = F_hllc[2] * A_int
+        F_hat[0, i] = f0 * A_int
+        F_hat[1, i] = f1 * A_int
+        F_hat[2, i] = f2 * A_int
 
     return F_hat
 
 
 @njit(fastmath=True, cache=True)
 def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
-    # 1. Compute Enthalpy and Sound Speed
     e_L = p_L / ((gamma - 1) * rho_L)
     E_L = e_L + 0.5 * u_L ** 2
     H_L = E_L + p_L / rho_L
@@ -126,69 +123,68 @@ def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
     H_R = E_R + p_R / rho_R
     c_R = np.sqrt(gamma * p_R / rho_R)
 
-    # 2. Estimate Wave Speeds (Roe-Einfeldt like estimates for robustness)
-    #    Simple estimates often suffice: S_L = min(u_L - c_L, u_R - c_R)
-    S_L = min(u_L - c_L, u_R - c_R)
-    S_R = max(u_L + c_L, u_R + c_R)
+    c_bar = 0.5 * (c_L + c_R)
+    rho_bar = 0.5 * (rho_L + rho_R)
 
-    # 3. Compute Contact Wave Speed (S_star)
-    #    (See Toro, Riemann Solvers and Numerical Methods for Fluid Dynamics)
+    p_star = 0.5 * (p_L + p_R) - 0.5 * (u_R - u_L) * rho_bar * c_bar
+    p_star = max(0.0, p_star)
+
+    if p_star <= p_L:
+        q_L = 1.0
+    else:
+        q_L = np.sqrt(1.0 + (gamma + 1.0) / (2.0 * gamma) * (p_star / p_L - 1.0))
+
+    if p_star <= p_R:
+        q_R = 1.0
+    else:
+        q_R = np.sqrt(1.0 + (gamma + 1.0) / (2.0 * gamma) * (p_star / p_R - 1.0))
+
+    S_L = u_L - c_L * q_L
+    S_R = u_R + c_R * q_R
+
     num = p_R - p_L + rho_L * u_L * (S_L - u_L) - rho_R * u_R * (S_R - u_R)
     den = rho_L * (S_L - u_L) - rho_R * (S_R - u_R)
-    S_star = num / (den + 1e-16)  # Avoid div by zero
-
-    # 4. Select Flux Region
-    F = np.zeros(3)
+    S_star = num / (den + 1e-16)
 
     if 0 <= S_L:
-        # Left State Flux
-        F[0] = rho_L * u_L
-        F[1] = rho_L * u_L ** 2 + p_L
-        F[2] = rho_L * u_L * H_L
+        f0 = rho_L * u_L
+        f1 = rho_L * u_L ** 2 + p_L
+        f2 = rho_L * u_L * H_L
 
     elif S_L <= 0 <= S_star:
-        # Star Left Flux
-        # F*_L = F_L + S_L * (U*_L - U_L)
-        # U*_L = rho_L * ((S_L - u_L) / (S_L - S_star)) * [1, S_star, E_L + (S_star - u_L)*(S_star + p_L/(rho_L*(S_L - u_L)))]
-
         factor = rho_L * (S_L - u_L) / (S_L - S_star)
         U_star_0 = factor
         U_star_1 = factor * S_star
         U_star_2 = factor * (E_L + (S_star - u_L) * (S_star + p_L / (rho_L * (S_L - u_L))))
 
-        F[0] = rho_L * u_L + S_L * (U_star_0 - rho_L)
-        F[1] = (rho_L * u_L ** 2 + p_L) + S_L * (U_star_1 - rho_L * u_L)
-        F[2] = (rho_L * u_L * H_L) + S_L * (U_star_2 - rho_L * E_L)
+        f0 = rho_L * u_L + S_L * (U_star_0 - rho_L)
+        f1 = (rho_L * u_L ** 2 + p_L) + S_L * (U_star_1 - rho_L * u_L)
+        f2 = (rho_L * u_L * H_L) + S_L * (U_star_2 - rho_L * E_L)
 
     elif S_star <= 0 <= S_R:
-        # Star Right Flux
         factor = rho_R * (S_R - u_R) / (S_R - S_star)
         U_star_0 = factor
         U_star_1 = factor * S_star
         U_star_2 = factor * (E_R + (S_star - u_R) * (S_star + p_R / (rho_R * (S_R - u_R))))
 
-        F[0] = rho_R * u_R + S_R * (U_star_0 - rho_R)
-        F[1] = (rho_R * u_R ** 2 + p_R) + S_R * (U_star_1 - rho_R * u_R)
-        F[2] = (rho_R * u_R * H_R) + S_R * (U_star_2 - rho_R * E_R)
+        f0 = rho_R * u_R + S_R * (U_star_0 - rho_R)
+        f1 = (rho_R * u_R ** 2 + p_R) + S_R * (U_star_1 - rho_R * u_R)
+        f2 = (rho_R * u_R * H_R) + S_R * (U_star_2 - rho_R * E_R)
 
-    else:  # S_R <= 0
-        # Right State Flux
-        F[0] = rho_R * u_R
-        F[1] = rho_R * u_R ** 2 + p_R
-        F[2] = rho_R * u_R * H_R
+    else:
+        f0 = rho_R * u_R
+        f1 = rho_R * u_R ** 2 + p_R
+        f2 = rho_R * u_R * H_R
 
-    return F
+    return f0, f1, f2
 
 
-@njit(cache=True)
+@njit(fastmath=True,cache=True)
 def adaptive_timestep(CFL, U, A, gamma, dz, ng, t, t_end):
-    precision = U.dtype.type
-    eps = precision(1e-12)
-
     rho, u, p, c = conserved_to_primitives(U, A, gamma)
 
-    smax = np.max(np.abs(u) + c)
-    dt_stable = CFL * dz / (smax + eps)
+    smax = np.max(np.abs(u[ng:-ng]) + c[ng:-ng])
+    dt_stable = CFL * dz / (smax + 1e-12)
 
     if t + dt_stable > t_end:
         dt_stable = max(0.0, t_end - t)
@@ -231,7 +227,7 @@ def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng,
     S = source(rho_p, Tf, br[ng:-ng], R, gamma, p_out[ng:-ng], P_propellant[ng:-ng], A_interfaces, dz)
 
     # 6. Final Assembly
-    rhs_out = np.zeros((3, nc))
+    rhs_out = np.empty((3, nc))
     for i in range(3):
         for j in range(nc):
             rhs_out[i, j] = S[i, j] - (F_hat[i, j + 1] - F_hat[i, j]) / dz
