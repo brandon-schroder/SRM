@@ -23,10 +23,9 @@ def compute_metrics(state, grid, cfg):
     p_inf = getattr(cfg, "p_inf", 101325.0)
     g0 = 9.80665
 
-    idx_head = grid.ng
     idx_exit = -1 - grid.ng
 
-    p_head = state.p[idx_head]
+    p_head = np.max(state.p)
     p_exit = state.p[idx_exit]
     u_exit = state.u[idx_exit]
     rho_exit = state.rho[idx_exit]

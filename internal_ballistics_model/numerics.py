@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit, prange
 
-from core.spatial_reconstruction import weno3_left as weno_left, weno3_right as weno_right
+from schemes.spatial_reconstruction import weno3_left as left_biased, weno3_right as right_biased
 from .boundary import apply_boundary_jit
 
 
@@ -81,13 +81,13 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng, F_hat):
 
         A_int = A[i]
 
-        rho_L = weno_left(rho[ii - 2], rho[ii - 1], rho[ii], rho[ii + 1], rho[ii + 2], rho[ii + 3])
-        u_L   = weno_left(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
-        p_L   = weno_left(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
+        rho_L = left_biased(rho[ii - 2], rho[ii - 1], rho[ii], rho[ii + 1], rho[ii + 2], rho[ii + 3])
+        u_L   = left_biased(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
+        p_L   = left_biased(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
 
-        rho_R = weno_right(rho[ii - 2], rho[ii - 1], rho[ii], rho[ii + 1], rho[ii + 2], rho[ii + 3])
-        u_R   = weno_right(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
-        p_R   = weno_right(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
+        rho_R = right_biased(rho[ii - 2], rho[ii - 1], rho[ii], rho[ii + 1], rho[ii + 2], rho[ii + 3])
+        u_R   = right_biased(u[ii - 2],   u[ii - 1],   u[ii],   u[ii + 1],   u[ii + 2],   u[ii + 3])
+        p_R   = right_biased(p[ii - 2],   p[ii - 1],   p[ii],   p[ii + 1],   p[ii + 2],   p[ii + 3])
 
         rho_L, rho_R = max(rho_L, 1e-6), max(rho_R, 1e-6)
         p_L, p_R = max(p_L, 1e-6), max(p_R, 1e-6)

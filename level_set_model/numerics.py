@@ -1,8 +1,8 @@
 import numpy as np
 from numba import njit, prange
 
-from core.spatial_reconstruction import weno5_left as weno_left
-from core.spatial_reconstruction import weno5_right as weno_right
+from schemes.spatial_reconstruction import weno5_left as weno_left
+from schemes.spatial_reconstruction import weno5_right as weno_right
 
 
 @njit(fastmath=True, cache=True, parallel=True)

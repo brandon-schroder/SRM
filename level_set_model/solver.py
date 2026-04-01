@@ -10,8 +10,8 @@ from .geometry import *
 from .boundary import *
 from .postprocess import *
 
-from core.temporal_integration import SSPRK33LowStorage as rk_step
-from core.logger import SimulationRecorder
+from schemes.temporal_integration import SSPRK33LowStorage as rk_step
+from utils.logger import SimulationRecorder
 
 
 class LSSolver:

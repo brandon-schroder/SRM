@@ -1,12 +1,13 @@
 from pathlib import Path
 import pyvista as pv
 import pandas as pd
+import time
 
 import coupled_solver_model
 import internal_ballistics_model
 import level_set_model
 
-bounds=[13.0*1e-3, 70.0*1e-3, None, None, 0.0*1e-3, 1899*1e-3] # 1035.5
+bounds=[14.0*1e-3, 67.0*1e-3, None, None, 4.83*1e-3, 1899*1e-3] # 1035.5
 prop_file = Path("test\\geometry\\NAWC6-SRM-Propellant.STL")
 case_file = Path("test\\geometry\\NAWC6-SRM-Casing.STL")
 
@@ -15,7 +16,7 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
     n_cells=500,  # Spatial resolution
     ng=3,  # Ghost cells
     bounds=(bounds[4], bounds[5]),  # Domain length (meters)
-    CFL=0.9,  # Stability factor
+    CFL=0.95,  # Stability factor
     t_end=20.0,  # Simulation duration
 
     # Initial Conditions
@@ -28,17 +29,20 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
 
     Tf = 2713+273.15,
 
-    R = 315,
-    gamma = 1.14,
+    R = 325.62,
+    gamma = (1083.0**2)/(325.62*(2713+273.15)),
 
-    log_interval = 1000
+    log_interval = 100_000,
+
+    burn_model = "mp",
+    burn_rate_update_interval = 10,
 
 
 )
 
 ls_config = level_set_model.config.SimulationConfig(
     n_periodics=6,  # Number of symmetric segments
-    size=(50, 40, 300),  # Resolution: (nr, ntheta, nz)
+    size=(50, 40, 500),  # Resolution: (nr, ntheta, nz)
     bounds=bounds,  # Physical dimensions
     file_scale=1.0e-3,
 
@@ -46,15 +50,17 @@ ls_config = level_set_model.config.SimulationConfig(
     file_case=case_file,  # Casing SDF input
 
     ng=3,  # Ghost cells
-    CFL=0.3,  # Stability factor
+    CFL=0.95,  # Stability factor
     t_end=20.0,  # Simulation duration
-    br_initial=10.0e-3  # Initial burn rate
+    br_initial=10.0e-3,  # Initial burn rate
+    log_interval=10,
+    vtk_interval= 100
 )
 
 coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
-    t_end=5.0)
+    t_end=1.0)
 
 solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)
 
@@ -68,6 +74,7 @@ burn_rates = []
 
 history = []
 
+start_time = time.time()
 while solver.t < coupled_conf.t_end:
     dt_ls, t_current = solver.step()
 
@@ -82,11 +89,13 @@ while solver.t < coupled_conf.t_end:
     })
     history.append(df_step)
 
-    print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa |")
+    print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa | Sub-cycles: {solver.sub_steps} |")
 
     if t_current >= coupled_conf.t_end or p_head < ib_config.p_inf:
         break
 
+end_time = time.time()
+print(f"Simulation time: {end_time - start_time:.2f} s")
 
 final_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
 
