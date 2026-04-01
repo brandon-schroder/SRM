@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit, prange
 
 from schemes.spatial_reconstruction import weno3_left as left_biased, weno3_right as right_biased
+from schemes.flux_splitting import hllc_flux as flux_splitting
 from .boundary import apply_boundary_jit
 
 
@@ -92,81 +93,13 @@ def compute_numerical_flux(U, A, rho, u, p, c, gamma, ng, F_hat):
         rho_L, rho_R = max(rho_L, 1e-6), max(rho_R, 1e-6)
         p_L, p_R = max(p_L, 1e-6), max(p_R, 1e-6)
 
-        f0, f1, f2 = hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma)
+        f0, f1, f2 = flux_splitting(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma)
 
         F_hat[0, i] = f0 * A_int
         F_hat[1, i] = f1 * A_int
         F_hat[2, i] = f2 * A_int
 
     return F_hat
-
-
-@njit(fastmath=True, cache=True)
-def hllc_flux(rho_L, u_L, p_L, rho_R, u_R, p_R, gamma):
-    e_L = p_L / ((gamma - 1) * rho_L)
-    E_L = e_L + 0.5 * u_L ** 2
-    H_L = E_L + p_L / rho_L
-    c_L = np.sqrt(gamma * p_L / rho_L)
-
-    e_R = p_R / ((gamma - 1) * rho_R)
-    E_R = e_R + 0.5 * u_R ** 2
-    H_R = E_R + p_R / rho_R
-    c_R = np.sqrt(gamma * p_R / rho_R)
-
-    c_bar = 0.5 * (c_L + c_R)
-    rho_bar = 0.5 * (rho_L + rho_R)
-
-    p_star = 0.5 * (p_L + p_R) - 0.5 * (u_R - u_L) * rho_bar * c_bar
-    p_star = max(0.0, p_star)
-
-    if p_star <= p_L:
-        q_L = 1.0
-    else:
-        q_L = np.sqrt(1.0 + (gamma + 1.0) / (2.0 * gamma) * (p_star / p_L - 1.0))
-
-    if p_star <= p_R:
-        q_R = 1.0
-    else:
-        q_R = np.sqrt(1.0 + (gamma + 1.0) / (2.0 * gamma) * (p_star / p_R - 1.0))
-
-    S_L = u_L - c_L * q_L
-    S_R = u_R + c_R * q_R
-
-    num = p_R - p_L + rho_L * u_L * (S_L - u_L) - rho_R * u_R * (S_R - u_R)
-    den = rho_L * (S_L - u_L) - rho_R * (S_R - u_R)
-    S_star = num / (den + 1e-16)
-
-    if 0 <= S_L:
-        f0 = rho_L * u_L
-        f1 = rho_L * u_L ** 2 + p_L
-        f2 = rho_L * u_L * H_L
-
-    elif S_L <= 0 <= S_star:
-        factor = rho_L * (S_L - u_L) / (S_L - S_star)
-        U_star_0 = factor
-        U_star_1 = factor * S_star
-        U_star_2 = factor * (E_L + (S_star - u_L) * (S_star + p_L / (rho_L * (S_L - u_L))))
-
-        f0 = rho_L * u_L + S_L * (U_star_0 - rho_L)
-        f1 = (rho_L * u_L ** 2 + p_L) + S_L * (U_star_1 - rho_L * u_L)
-        f2 = (rho_L * u_L * H_L) + S_L * (U_star_2 - rho_L * E_L)
-
-    elif S_star <= 0 <= S_R:
-        factor = rho_R * (S_R - u_R) / (S_R - S_star)
-        U_star_0 = factor
-        U_star_1 = factor * S_star
-        U_star_2 = factor * (E_R + (S_star - u_R) * (S_star + p_R / (rho_R * (S_R - u_R))))
-
-        f0 = rho_R * u_R + S_R * (U_star_0 - rho_R)
-        f1 = (rho_R * u_R ** 2 + p_R) + S_R * (U_star_1 - rho_R * u_R)
-        f2 = (rho_R * u_R * H_R) + S_R * (U_star_2 - rho_R * E_R)
-
-    else:
-        f0 = rho_R * u_R
-        f1 = rho_R * u_R ** 2 + p_R
-        f2 = rho_R * u_R * H_R
-
-    return f0, f1, f2
 
 
 @njit(fastmath=True, cache=True)
