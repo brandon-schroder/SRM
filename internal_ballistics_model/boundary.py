@@ -81,9 +81,9 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
     for i in range(ng):
         i_mirror = i0 + (ng - 1 - i)
 
-        U[0, i] = U[0, i_mirror] * A[i] / A[i_mirror]  # Mass
-        U[1, i] = -U[1, i_mirror] * A[i] / A[i_mirror]  # Momentum (reversed)
-        U[2, i] = U[2, i_mirror] * A[i] / A[i_mirror]  # Energy
+        U[0, i] =  U[0, i_mirror] * A[i] / A[i_mirror]  
+        U[1, i] = -U[1, i_mirror] * A[i] / A[i_mirror]
+        U[2, i] =  U[2, i_mirror] * A[i] / A[i_mirror]
 
     return U
 
@@ -94,9 +94,9 @@ def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
         ghost_idx = -ng + i
         interior_idx = -ng - 1 - i
 
-        U[0, ghost_idx] = U[0, interior_idx]  # Mass (symmetric)
-        U[1, ghost_idx] = -U[1, interior_idx]  # Momentum (anti-symmetric)
-        U[2, ghost_idx] = U[2, interior_idx]  # Energy (symmetric)
+        U[0, ghost_idx] =  U[0, interior_idx] * A[ghost_idx] / A[interior_idx]
+        U[1, ghost_idx] = -U[1, interior_idx] * A[ghost_idx] / A[interior_idx]
+        U[2, ghost_idx] =  U[2, interior_idx] * A[ghost_idx] / A[interior_idx]
 
     return U
 
@@ -104,18 +104,21 @@ def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 @njit(fastmath=True, cache=True)
 def boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
     for i in range(ng):
-        U[0, i] = U[0, ng]
-        U[1, i] = U[1, ng]
-        U[2, i] = U[2, ng]
+        U[0, i] = U[0, ng] * A[i] / A[ng]
+        U[1, i] = U[1, ng] * A[i] / A[ng]
+        U[2, i] = U[2, ng] * A[i] / A[ng]
     return U
 
 
 @njit(fastmath=True, cache=True)
 def boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
     for i in range(ng):
-        U[0, -1 - i] = U[0, -ng - 1]
-        U[1, -1 - i] = U[1, -ng - 1]
-        U[2, -1 - i] = U[2, -ng - 1]
+        ghost_idx = -1 - i
+        interior_idx = -ng - 1
+
+        U[0, -1 - i] = U[0, -ng - 1] * A[ghost_idx] / A[interior_idx]
+        U[1, -1 - i] = U[1, -ng - 1] * A[ghost_idx] / A[interior_idx]
+        U[2, -1 - i] = U[2, -ng - 1] * A[ghost_idx] / A[interior_idx]
     return U
 
 
