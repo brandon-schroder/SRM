@@ -87,7 +87,7 @@ def main():
 
     # Recalculate the conserved variables (U) based on the new primitives
     solver.state.U[:] = primitives_to_conserved(
-        solver.state.rho, solver.state.u, solver.state.p, solver.state.A, config.gamma
+        solver.state.rho, solver.state.u, solver.state.p, solver.state.A, config.gamma, solver.state.U
     )
 
     print("Running Sod Shock Tube...")
