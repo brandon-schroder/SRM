@@ -1,8 +1,7 @@
 import numpy as np
 from numba import njit, prange
 
-from schemes.spatial_reconstruction import weno5_left as weno_left
-from schemes.spatial_reconstruction import weno5_right as weno_right
+from schemes.spatial_reconstruction import weno5_left as left_biased, weno5_right as right_biased
 
 
 @njit(fastmath=True, cache=True, parallel=True)
@@ -34,24 +33,24 @@ def weno_godunov(phi, dx, r_coords, ng=3):
                 jp2 = (j + 2) % ntheta
                 jp3 = (j + 3) % ntheta
 
-                f_m_r = weno_left(
+                f_m_r = left_biased(
                     phi[ii - 3, j, kk], phi[ii - 2, j, kk], phi[ii - 1, j, kk],
                     phi[ii, j, kk], phi[ii + 1, j, kk], phi[ii + 2, j, kk])
-                f_p_r = weno_right(
+                f_p_r = right_biased(
                     phi[ii - 2, j, kk], phi[ii - 1, j, kk], phi[ii, j, kk],
                     phi[ii + 1, j, kk], phi[ii + 2, j, kk], phi[ii + 3, j, kk])
 
-                f_m_t = weno_left(
+                f_m_t = left_biased(
                     phi[ii, jm3, kk], phi[ii, jm2, kk], phi[ii, jm1, kk],
                     phi[ii, j, kk], phi[ii, jp1, kk], phi[ii, jp2, kk])
-                f_p_t = weno_right(
+                f_p_t = right_biased(
                     phi[ii, jm2, kk], phi[ii, jm1, kk], phi[ii, j, kk],
                     phi[ii, jp1, kk], phi[ii, jp2, kk], phi[ii, jp3, kk])
 
-                f_m_z = weno_left(
+                f_m_z = left_biased(
                     phi[ii, j, kk - 3], phi[ii, j, kk - 2], phi[ii, j, kk - 1],
                     phi[ii, j, kk], phi[ii, j, kk + 1], phi[ii, j, kk + 2])
-                f_p_z = weno_right(
+                f_p_z = right_biased(
                     phi[ii, j, kk - 2], phi[ii, j, kk - 1], phi[ii, j, kk],
                     phi[ii, j, kk + 1], phi[ii, j, kk + 2], phi[ii, j, kk + 3])
 
