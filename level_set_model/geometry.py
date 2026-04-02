@@ -256,6 +256,15 @@ def compute_geometry_3d_fused(nx, ny, nz, Xg, Yg, Zg, phi_p, phi_c):
 # ==============================================================================
 
 def compute_geometric_distributions(grid, state):
+    """
+    Computes axial geometric distributions for the motor.
+
+    Logic:
+    - state.phi < 0 is fluid. We invert this to phi_prop > 0 for the volume kernel.
+    - The kernels calculate values for a single SECTOR (defined by the grid).
+    - We then scale by n_periodics and add the central core to get full 360 deg values.
+    """
+    # Invert phi so that the fluid/void zone is > 0 for the calc_vol_tet logic
     phi_prop = np.ascontiguousarray(-state.phi)
     phi_case = np.ascontiguousarray(-state.casing)
 
@@ -272,34 +281,49 @@ def compute_geometric_distributions(grid, state):
     core_area_base = np.pi * (r_min ** 2)
     n_periodics = grid.n_periodics
 
-    # Single parallel call handles the entire grid
-    v_c_arr, v_g_arr, s_p_arr, s_c_arr = compute_geometry_3d_fused(
+    # v_void_sector: Volume of the gas/void zone within the angular sector
+    # v_c_sector:   Total volume inside the casing within the angular sector
+    # s_p_sector:   Surface area of the propellant-gas interface (perimeter)
+    # s_c_sector:   Surface area of the exposed casing
+    v_c_sector, v_void_sector, s_p_sector, s_c_sector = compute_geometry_3d_fused(
         nx_dual, ny_dual, nz_dual,
         Xg, Yg, Zg,
         phi_prop, phi_case
     )
 
-    # Vectorized post-processing
-    z_coords = Zg[0, 0, :-1]  # Get all z-coords at once
+    # Vectorized post-processing to convert volumes/areas to 1D axial distributions
+    z_coords = Zg[0, 0, :-1]
     z_next = Zg[0, 0, 1:]
     dz = z_next - z_coords
-    dz = np.where(dz == 0, 1.0, dz)  # Protect against division by zero
+    dz = np.where(dz == 0, 1.0, dz)  # Guard against division by zero
 
-    casing_areas = v_c_arr / dz
-    grain_areas = v_g_arr / dz
-    perimeters_raw = s_p_arr / dz
-    casing_exposed = s_c_arr / dz
+    # Convert 3D slice metrics to average 2D cross-sectional metrics
+    casing_area_sector = v_c_sector / dz
+    void_area_sector = v_void_sector / dz
+    perimeter_sector = s_p_sector / dz
+    casing_exposed_sector = s_c_sector / dz
 
-    flow_port_areas = casing_areas - grain_areas
+    # The solid propellant area in this sector is the total casing area minus the void
+    propellant_area_sector = casing_area_sector - void_area_sector
 
-    # Core correction logic using numpy vectorization
+    # Core correction: The core exists only where the casing hasn't closed off
     core_areas = np.full(nz_dual, core_area_base)
-    core_areas[casing_areas < 1e-9] = 0.0
+    core_areas[casing_area_sector < 1e-9] = 0.0
 
-    perimeters = perimeters_raw * n_periodics
-    hydraulic_perimeters = (perimeters_raw + casing_exposed) * n_periodics
-    casing_areas_final = casing_areas * n_periodics + core_areas
-    flow_areas = grain_areas * n_periodics + core_areas
-    propellant_areas = flow_port_areas * n_periodics
+    # Final 360-degree Scaling
+    # 1. Total Perimeter of the burning surface
+    perimeters = perimeter_sector * n_periodics
+
+    # 2. Hydraulic Perimeter (includes exposed casing for friction/heat transfer)
+    hydraulic_perimeters = (perimeter_sector + casing_exposed_sector) * n_periodics
+
+    # 3. Total Flow Area (Sum of all sector voids + the central hollow core)
+    flow_areas = (void_area_sector * n_periodics) + core_areas
+
+    # 4. Total Casing Internal Area (The maximum possible flow area)
+    casing_areas_final = (casing_area_sector * n_periodics) + core_areas
+
+    # 5. Total Solid Propellant Area
+    propellant_areas = propellant_area_sector * n_periodics
 
     return z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas_final, propellant_areas
