@@ -70,56 +70,27 @@ def weno_godunov(phi, dx, r_coords, ng=3):
     return np.sqrt(D_r + D_theta + D_z)
 
 
-@njit(fastmath=True, cache=True, parallel=True)
-def adaptive_timestep(grad_mag, dx, r_coords, ng, CFL, t_end, br, t=0.0):
-    precision = grad_mag.dtype.type
-    eps = precision(1e-12)
-
-    nr, ntheta, nz = grad_mag.shape
+@njit(fastmath=True, cache=True)
+def adaptive_timestep(dx, r_coords, ng, CFL, t_end, br, t=0.0):
     dr, dtheta, dz = dx
 
-    r_physical = r_coords[ng:-ng, 0, ng]
+    v_max = br.max()
+    if v_max < 1e-16:
+        v_max = 1e-16
 
-    max_grad_per_r = np.zeros(nr, dtype=grad_mag.dtype)
-    for i in prange(nr):
-        max_val = 0.0
-        for j in range(ntheta):
-            for k in range(nz):
-                if grad_mag[i, j, k] > max_val:
-                    max_val = grad_mag[i, j, k]
-        max_grad_per_r[i] = max_val
+    r_min = r_coords[ng, 0, ng]
 
-    dt_min = 1e20
+    h_theta_min = (r_min * dtheta)
+    if h_theta_min < 1e-16:
+        h_theta_min = dr * 0.5
 
-    for i in range(nr):
-        r_i = r_physical[i]
-        max_grad_i = max_grad_per_r[i]
+    dt_stable = CFL / (v_max * ((1.0 / dr) + (1.0 / h_theta_min) + (1.0 / dz)))
 
-        if max_grad_i < eps:
-            continue
-
-        wave_speed = br.max()
-
-        h_theta = r_i * dtheta
-        if h_theta < eps:
-            h_theta = dr * 0.5
-
-        dt_r     = dr     / wave_speed
-        dt_theta = h_theta / wave_speed
-        dt_z     = dz     / wave_speed
-
-        dt_local = min(dt_r, dt_theta, dt_z)
-
-        if dt_local < dt_min:
-            dt_min = dt_local
-
-    dt_stable = CFL * dt_min
-
-    dt_stable = min(max(dt_stable, eps), 0.1)
+    dt_stable = min(max(dt_stable, 1e-16), 0.5)
 
     t_remaining = t_end - t
 
-    if t_remaining <= eps or t_remaining < 0:
+    if t_remaining <= 1e-16 or t_remaining < 0:
         return 0.0
 
     if t_remaining <= dt_stable:
