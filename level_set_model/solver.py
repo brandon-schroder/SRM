@@ -88,8 +88,8 @@ class LSSolver:
 
 
     def _get_geometry(self):
-        z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = compute_geometric_distributions(
-            self.grid, self.state)
+        z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = \
+            compute_geometric_distributions(self.grid, self.state)
 
         self.state.x = z_coords
         self.state.P_propellant = perimeters
@@ -105,7 +105,7 @@ class LSSolver:
 
     def step(self) -> Tuple[float, float]:
         dt = adaptive_timestep(
-            self.state.grad_mag, self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
+            self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
             self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
 
         self.integrator.step(self.state.phi[self.grid.interior], dt, self._compute_rhs)
@@ -131,9 +131,10 @@ class LSSolver:
 
 
     def _save_vtk(self):
-        vtk_name = f"step_{self.step_count:05d}.vtk"
+        vtk_name = f"step_{self.step_count:05d}.vti"
         vtk_path = os.path.join(self.vtk_dir, vtk_name)
-        self.vtk_times.append(self.state.t)
+
+        self.vtk_times.append((vtk_name, self.state.t))
 
         self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
         phi_bounded = np.maximum(self.state.phi, self.state.casing)
@@ -144,13 +145,15 @@ class LSSolver:
     def finalize(self):
         self.recorder.finalize()
 
-        series_path = os.path.join(self.vtk_dir, "results.vtk.series")
+        # Update series extension to match the new format
+        series_path = os.path.join(self.vtk_dir, "results.vti.series")
 
+        # Use the securely tracked filenames instead of calculating them
         series_data = {
             "file-series-version": "1.0",
             "files": [
-                {"name": f"step_{i * self.cfg.vtk_interval:05d}.vtk", "time": t}
-                for i, t in enumerate(self.vtk_times)
+                {"name": name, "time": t}
+                for name, t in self.vtk_times
             ]
         }
 
@@ -158,7 +161,7 @@ class LSSolver:
             with open(series_path, 'w') as f:
                 json.dump(series_data, f, indent=4)
         except Exception as e:
-            print(f"Warning: Could not create .vtk.series file: {e}")
+            print(f"Warning: Could not create .vti.series file: {e}")
 
     def get_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame({
