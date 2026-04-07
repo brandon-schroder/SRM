@@ -49,8 +49,6 @@ class LSSolver:
         if not os.path.exists(self.vtk_dir):
             os.makedirs(self.vtk_dir)
 
-        self.initialize()
-
     def initialize(self):
         filename_prop = self.cfg.file_prop
         filename_case = self.cfg.file_case
