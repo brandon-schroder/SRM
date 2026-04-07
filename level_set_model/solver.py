@@ -1,5 +1,3 @@
-import os
-import json
 import pandas as pd
 from typing import Tuple
 
@@ -11,7 +9,8 @@ from .boundary import *
 from .postprocess import *
 
 from schemes.temporal_integration import SSPRK33LowStorage as rk_step
-from utils.logger import SimulationRecorder
+from utils.hdf5_logger import HDF5Recorder
+from utils.vtk_logger import VTKRecorder
 
 
 class LSSolver:
@@ -19,42 +18,52 @@ class LSSolver:
         self.cfg = config
 
         self.grid = Grid3D(config)
-
         self.state = State(dims=self.grid.dims, dtype=self.cfg.dtype)
 
         self.bc_flag = BCType[self.cfg.bc_type.upper()].value
         self.step_count = 0
         self.dt = 0.0
-        self.vtk_times = []
 
         interior_shape = self.state.phi[self.grid.interior].shape
         self.integrator = rk_step(shape=interior_shape, dtype=self.cfg.dtype)
 
-        self.recorder = SimulationRecorder(
-            solver=self,
-            state_map={
-                "x": {"attr": "x", "unit": "m"},
-                "A_flow": {"attr": "A_flow", "unit": "m^2"},
-                "A_casing": {"attr": "A_casing", "unit": "m^2"},
-                "A_propellant": {"attr": "A_propellant", "unit": "m^2"},
-                "P_propellant": {"attr": "P_propellant", "unit": "m"},
-                "P_wetted": {"attr": "P_wetted", "unit": "m"},
-            },
-            metrics_def=METRICS,
-            geometry_callback=save_3d_geometry,
-            summary_callback=compute_summary_stats
-        )
+        # 1D HDF5 Data Recorder
+        self.hdf5_recorder = None
+        if getattr(self.cfg, "log_interval", 0) and self.cfg.log_interval > 0:
+            self.hdf5_recorder = HDF5Recorder(
+                solver=self,
+                state_map={
+                    "x": {"attr": "x", "unit": "m"},
+                    "A_flow": {"attr": "A_flow", "unit": "m^2"},
+                    "A_casing": {"attr": "A_casing", "unit": "m^2"},
+                    "A_propellant": {"attr": "A_propellant", "unit": "m^2"},
+                    "P_propellant": {"attr": "P_propellant", "unit": "m"},
+                    "P_wetted": {"attr": "P_wetted", "unit": "m"},
+                },
+                metrics_def=METRICS,
+                geometry_callback=save_3d_geometry,
+                summary_callback=compute_summary_stats
+            )
 
-        self.vtk_dir = getattr(self.cfg, "vtk_dir", "vtk_output")
-        if not os.path.exists(self.vtk_dir):
-            os.makedirs(self.vtk_dir)
+        # 3D VTK Background Recorder
+        self.vtk_recorder = None
+        if getattr(self.cfg, "vtk_interval", 0) and self.cfg.vtk_interval > 0:
+            self.vtk_recorder = VTKRecorder(
+                solver=self,
+                state_map={
+                    "propellant": "phi",
+                    "casing": "casing"
+                },
+                data_callback=prepare_vtk_data
+            )
 
     def initialize(self):
         filename_prop = self.cfg.file_prop
         filename_case = self.cfg.file_case
 
-        prop = pv.read(filename_prop).scale(self.cfg.file_scale)
-        case = pv.read(filename_case).scale(self.cfg.file_scale)
+        # Fast initialization via mesh cleaning and decimation
+        prop = pv.read(filename_prop).scale(self.cfg.file_scale).clean().decimate(0.8)
+        case = pv.read(filename_case).scale(self.cfg.file_scale).clean().decimate(0.8)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
         self.grid.pv_grid.point_data["casing"] = self.grid.pv_grid.point_data["implicit_distance"]
@@ -67,13 +76,14 @@ class LSSolver:
 
         self._get_geometry()
 
-        self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
         self.state.br = self.state.br + self.cfg.br_initial
         self.state.t = 0.0
 
-        self.recorder.save()
-        self._save_vtk()
-
+        # Run initial save for both loggers
+        if self.hdf5_recorder:
+            self.hdf5_recorder.save()
+        if self.vtk_recorder:
+            self.vtk_recorder.save()
 
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
 
@@ -83,7 +93,6 @@ class LSSolver:
         self.state.grad_mag = weno_godunov(self.state.phi, self.grid.dx, self.grid.polar_coords[0], self.grid.ng)
 
         return -self.state.br[self.grid.interior] * self.state.grad_mag
-
 
     def _get_geometry(self):
         z_coords, perimeters, hydraulic_perimeters, flow_areas, casing_areas, propellant_areas = \
@@ -113,53 +122,24 @@ class LSSolver:
         self.state.t += dt
         self.step_count += 1
 
-        if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
-            self.recorder.save()
+        if self.hdf5_recorder and (self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end):
+            self.hdf5_recorder.save()
 
-        if self.step_count % self.cfg.vtk_interval == 0 or self.state.t >= self.cfg.t_end:
-            self._save_vtk()
+        if self.vtk_recorder and (self.step_count % self.cfg.vtk_interval == 0 or self.state.t >= self.cfg.t_end):
+            self.vtk_recorder.save()
 
         return dt, self.state.t
-
 
     def get_derived_quantities(self):
         data = compute_metrics(self.state, self.grid, self.cfg)
         data["scalars"]["time"] = self.state.t
         return data
 
-
-    def _save_vtk(self):
-        vtk_name = f"step_{self.step_count:05d}.vti"
-        vtk_path = os.path.join(self.vtk_dir, vtk_name)
-
-        self.vtk_times.append((vtk_name, self.state.t))
-
-        self.grid.pv_grid["propellant"] = self.state.phi.flatten(order='F')
-        phi_bounded = np.maximum(self.state.phi, self.state.casing)
-        self.grid.pv_grid["propellant_bounded"] = phi_bounded.flatten(order='F')
-
-        self.grid.pv_grid.save(vtk_path)
-
     def finalize(self):
-        self.recorder.finalize()
-
-        # Update series extension to match the new format
-        series_path = os.path.join(self.vtk_dir, "results.vti.series")
-
-        # Use the securely tracked filenames instead of calculating them
-        series_data = {
-            "file-series-version": "1.0",
-            "files": [
-                {"name": name, "time": t}
-                for name, t in self.vtk_times
-            ]
-        }
-
-        try:
-            with open(series_path, 'w') as f:
-                json.dump(series_data, f, indent=4)
-        except Exception as e:
-            print(f"Warning: Could not create .vti.series file: {e}")
+        if self.hdf5_recorder:
+            self.hdf5_recorder.finalize()
+        if self.vtk_recorder:
+            self.vtk_recorder.finalize()
 
     def get_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame({

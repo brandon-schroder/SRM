@@ -5,7 +5,7 @@ from collections import defaultdict
 
 
 class HDF5Logger:
-    def __init__(self, filename, config=None, units=None, buffer_size=1000, dtype=np.float32):
+    def __init__(self, filename, config=None, units=None, buffer_size=100, dtype=np.float32):
         self.filename = filename
         self.buffer = defaultdict(list)
         self.buffer_size = buffer_size
@@ -85,7 +85,7 @@ class HDF5Logger:
         self.finalize()
 
 
-class SimulationRecorder(HDF5Logger):
+class HDF5Recorder(HDF5Logger):
     def __init__(self, solver, state_map, metrics_def=None, geometry_callback=None, summary_callback=None):
         self.solver = solver
         self.state_map = state_map

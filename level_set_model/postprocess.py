@@ -49,3 +49,8 @@ def compute_summary_stats(filename: str) -> dict:
         pass
 
     return stats
+
+def prepare_vtk_data(state) -> dict:
+    return {
+        "propellant_bounded": np.maximum(state.phi, state.casing)
+    }

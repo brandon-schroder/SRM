@@ -7,7 +7,7 @@ from .numerics import *
 from .config import *
 from .postprocess import *
 
-from utils.logger import *
+from utils.hdf5_logger import *
 from schemes.temporal_integration import SSPRK33LowStorage as rk_step
 
 
@@ -32,7 +32,7 @@ class IBSolver:
 
         self.burn_model_flag = BurnModel[self.cfg.burn_model.upper()].value
 
-        self.recorder = SimulationRecorder(
+        self.recorder = HDF5Recorder(
             solver=self,
             state_map={
                 "pressure": {"attr": "p", "unit": "Pa"},
