@@ -1,13 +1,9 @@
-import pandas as pd
-
 from .grid import *
 from .boundary import *
 from .burn_rate import *
 from .numerics import *
 from .config import *
-from .postprocess import *
 
-from utils.hdf5_logger import *
 from schemes.temporal_integration import SSPRK33LowStorage as rk_step
 
 
@@ -32,20 +28,6 @@ class IBSolver:
 
         self.burn_model_flag = BurnModel[self.cfg.burn_model.upper()].value
 
-        self.hdf5_recorder = None
-        if getattr(self.cfg, "log_interval", 0) and self.cfg.log_interval > 0:
-            self.hdf5_recorder = HDF5Recorder(
-                solver=self,
-                state_map={
-                    "pressure": {"attr": "p", "unit": "Pa"},
-                    "velocity": {"attr": "u", "unit": "m/s"},
-                    "density": {"attr": "rho", "unit": "kg/m^3"},
-                    "area": {"attr": "A", "unit": "m^2"}
-                },
-                metrics_def=METRICS,
-                geometry_callback=save_1d_geometry,
-                summary_callback=compute_summary_stats
-            )
 
     def set_geometry(self, z, A, P, P_wetted, A_propellant, A_casing):
         ng = self.grid.ng
@@ -76,8 +58,6 @@ class IBSolver:
 
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
 
-        if self.hdf5_recorder:
-            self.hdf5_recorder.save()
 
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
         rhs_out = rhs_numerics(
@@ -91,7 +71,7 @@ class IBSolver:
 
         return rhs_out
 
-    def step(self, save: bool = True) -> Tuple[float, float]:
+    def step(self):
         self.dt = adaptive_timestep(
             self.cfg.CFL, self.state.u, self.state.c,
             self.grid.dx[2], self.grid.ng, self.state.t, self.cfg.t_end)
@@ -101,32 +81,7 @@ class IBSolver:
 
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
-        if save:
-            if self.hdf5_recorder and (self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end):
-                self.hdf5_recorder.save()
-
         self.state.t += self.dt
         self.step_count += 1
 
         return self.dt, self.state.t
-
-    def get_derived_quantities(self):
-        data = compute_metrics(self.state, self.grid, self.cfg)
-        data["scalars"]["time"] = self.state.t
-        data["scalars"]["dt"] = self.dt
-        return data
-
-    def finalize(self):
-        if self.hdf5_recorder:  
-            self.hdf5_recorder.finalize()
-
-    def get_dataframe(self) -> pd.DataFrame:
-        sl = self.grid.interior
-        return pd.DataFrame({
-            "z": self.grid.cart_coords[2][sl],
-            "rho": self.state.rho[sl],
-            "u": self.state.u[sl],
-            "p": self.state.p[sl],
-            "Mach": self.state.u[sl] / (self.state.c[sl] + 1e-16),
-            "Area": self.state.A[sl]
-        })
