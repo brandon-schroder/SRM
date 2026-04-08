@@ -32,18 +32,20 @@ class IBSolver:
 
         self.burn_model_flag = BurnModel[self.cfg.burn_model.upper()].value
 
-        self.recorder = HDF5Recorder(
-            solver=self,
-            state_map={
-                "pressure": {"attr": "p", "unit": "Pa"},
-                "velocity": {"attr": "u", "unit": "m/s"},
-                "density": {"attr": "rho", "unit": "kg/m^3"},
-                "area": {"attr": "A", "unit": "m^2"}
-            },
-            metrics_def=METRICS,
-            geometry_callback=save_1d_geometry,
-            summary_callback=compute_summary_stats
-        )
+        self.hdf5_recorder = None
+        if getattr(self.cfg, "log_interval", 0) and self.cfg.log_interval > 0:
+            self.hdf5_recorder = HDF5Recorder(
+                solver=self,
+                state_map={
+                    "pressure": {"attr": "p", "unit": "Pa"},
+                    "velocity": {"attr": "u", "unit": "m/s"},
+                    "density": {"attr": "rho", "unit": "kg/m^3"},
+                    "area": {"attr": "A", "unit": "m^2"}
+                },
+                metrics_def=METRICS,
+                geometry_callback=save_1d_geometry,
+                summary_callback=compute_summary_stats
+            )
 
     def set_geometry(self, z, A, P, P_wetted, A_propellant, A_casing):
         ng = self.grid.ng
@@ -74,7 +76,8 @@ class IBSolver:
 
         self.state.c[:] = np.sqrt(self.cfg.gamma * self.state.p / self.state.rho)
 
-        self.recorder.save()
+        if self.hdf5_recorder:
+            self.hdf5_recorder.save()
 
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
         rhs_out = rhs_numerics(
@@ -99,8 +102,8 @@ class IBSolver:
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
         if save:
-            if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
-                self.recorder.save()
+            if self.hdf5_recorder and (self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end):
+                self.hdf5_recorder.save()
 
         self.state.t += self.dt
         self.step_count += 1
@@ -114,7 +117,8 @@ class IBSolver:
         return data
 
     def finalize(self):
-        self.recorder.finalize()
+        if self.hdf5_recorder:  
+            self.hdf5_recorder.finalize()
 
     def get_dataframe(self) -> pd.DataFrame:
         sl = self.grid.interior
