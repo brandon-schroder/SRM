@@ -48,7 +48,7 @@ ls_config = level_set_model.config.SimulationConfig(
 
     ng=3,  # Ghost cells
     CFL=0.95,  # Stability factor
-    br_initial=10.0e-3,  # Initial burn rate
+    br_initial=1.0e-3,  # Initial burn rate
     log_interval=1,
     vtk_interval=0
 )
@@ -57,7 +57,7 @@ coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
     t_end=1.0,
-    coupling_scheme='explicit'
+    coupling_scheme='explicit',
 )
 
 solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)

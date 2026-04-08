@@ -20,7 +20,7 @@ class SimulationConfig:
     br_initial: float = 1.0E-6
     bc_type: str = "default"
 
-    output_filename: str = "output.h5"
+    output_filename: str = "level_set.h5"
     vtk_dir: str = "vtk_output"
 
     log_interval: int = 10
