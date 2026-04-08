@@ -1,6 +1,5 @@
 import numpy as np
 import pyvista as pv
-import h5py
 
 from .config import SimulationConfig
 
@@ -37,29 +36,6 @@ class Grid3D:
         self.polar_coords=np.array([R_full, THETA_full, Z_full], dtype=config.dtype)
         self.interior = np.s_[self.ng:-self.ng, :-1, self.ng:-self.ng]
 
-
-def save_3d_geometry(filename, solver):
-    with h5py.File(filename, "a") as f:
-        if "geometry" in f:
-            return
-
-        g_geo = f.create_group("geometry")
-        grid = solver.grid
-
-        r_axis = grid.polar_coords[0][:, 0, 0]
-        t_axis = grid.polar_coords[1][0, :, 0]
-        z_axis = grid.polar_coords[2][0, 0, :]
-
-        dset_r = g_geo.create_dataset("r", data=r_axis)
-        dset_r.attrs["units"] = "m"
-
-        dset_t = g_geo.create_dataset("theta", data=t_axis)
-        dset_t.attrs["units"] = "rad"
-
-        dset_z = g_geo.create_dataset("z", data=z_axis)
-        dset_z.attrs["units"] = "m"
-
-        g_geo.attrs["dims"] = grid.dims
 
 
 

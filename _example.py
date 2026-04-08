@@ -1,5 +1,4 @@
 from pathlib import Path
-import pyvista as pv
 import pandas as pd
 import time
 
@@ -14,7 +13,6 @@ case_file = Path("test\\geometry\\NAWC6-SRM-Casing.STL")
 ib_config = internal_ballistics_model.config.SimulationConfig(
     # Grid parameters
     n_cells=500,  # Spatial resolution
-    ng=3,  # Ghost cells
     bounds=(bounds[4], bounds[5]),  # Domain length (meters)
     CFL=0.95,  # Stability factor
 
@@ -31,8 +29,6 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
     R = 325.62,
     gamma = (1083.0**2)/(325.62*(2713+273.15)),
 
-    log_interval = 500,
-
     burn_model = "mp",
     burn_rate_update_interval = 1,
 )
@@ -46,23 +42,18 @@ ls_config = level_set_model.config.SimulationConfig(
     file_prop=prop_file,  # Propellant SDF input
     file_case=case_file,  # Casing SDF input
 
-    ng=3,  # Ghost cells
     CFL=0.95,  # Stability factor
-    br_initial=10.0e-3,  # Initial burn rate
-    log_interval=1,
-    vtk_interval=0
+    br_initial=1.0e-3,  # Initial burn rate
 )
 
 coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
     t_end=1.0,
-    coupling_scheme='explicit'
+    coupling_scheme='explicit',
 )
 
 solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)
-
-initial_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
 
 print(f"Starting Simulation (Target: {coupled_conf.t_end}s)")
 
@@ -95,16 +86,4 @@ while solver.t < coupled_conf.t_end:
 end_time = time.time()
 print(f"Simulation time: {end_time - start_time:.2f} s")
 
-final_surface = solver.ls.grid.pv_grid.contour(scalars="propellant", isosurfaces=[0.0])
-
-
-b=final_surface.bounds
-n=ls_config.size[2]/2
-initial_surface = initial_surface.slice_along_axis(axis='z', n=20, bounds=[b[0], b[1], b[2], b[3], 800E-3, b[5]])
-final_surface = final_surface.slice_along_axis(axis='z', n=20, bounds=[b[0], b[1], b[2], b[3], 800E-3, b[5]])
-
-plotter = pv.Plotter()
-plotter.add_mesh(initial_surface, color="red", opacity=0.8)
-plotter.add_mesh(final_surface, color="blue", opacity=0.8)
-plotter.show()
 

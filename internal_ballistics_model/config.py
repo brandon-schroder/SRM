@@ -32,8 +32,6 @@ class SimulationConfig:
     burn_model: str = "none"
     burn_rate_update_interval: int = 1
 
-    output_filename: str = "internal_ballistics.h5"
-    log_interval: int = 10
     dtype: np.dtype = np.float64
 
 

@@ -82,7 +82,7 @@ class CoupledSolver:
 
             # 1. LS Step
             self.ls.state.br = self.ls.set_burn_rate(self.ib.grid.cart_coords[2], br_prev)
-            dt_ls, t_target = self.ls.step(save=False)
+            dt_ls, t_target = self.ls.step()
 
             # 2. Sync and IB Sub-stepping
             self._sync_geometry()
@@ -90,7 +90,7 @@ class CoupledSolver:
 
             iter_sub_steps = 0  # Track steps for THIS iteration
             while self.ib.state.t < t_target:
-                dt_ib, t_ib = self.ib.step(save=False)
+                dt_ib, t_ib = self.ib.step()
                 iter_sub_steps += 1
                 if dt_ib <= 1E-10: break
 
@@ -101,14 +101,7 @@ class CoupledSolver:
             if error < self.tolerance or is_last_iter:
                 self.sub_steps = iter_sub_steps
 
-                self.ls.hdf5_recorder.save()
-                self.ib.recorder.save()
                 break
 
         self.t = t_target
         return dt_ls, self.t
-
-    def get_dataframe(self):
-        df_ib = self.ib.get_dataframe()
-
-        return df_ib
