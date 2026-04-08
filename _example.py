@@ -57,7 +57,7 @@ coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
     t_end=1.0,
-    coupling_type='explicit'
+    coupling_scheme='explicit'
 )
 
 solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)
