@@ -27,8 +27,8 @@ class LSSolver:
         filename_case = self.cfg.file_case
 
         # Fast initialization via mesh cleaning and decimation
-        prop = pv.read(filename_prop).scale(self.cfg.file_scale).clean().decimate(0.8)
-        case = pv.read(filename_case).scale(self.cfg.file_scale).clean().decimate(0.8)
+        prop = pv.read(filename_prop).scale(self.cfg.file_scale)#.clean().decimate(0.9)
+        case = pv.read(filename_case).scale(self.cfg.file_scale)#.clean().decimate(0.9)
 
         self.grid.pv_grid = self.grid.pv_grid.compute_implicit_distance(case)
         self.grid.pv_grid.point_data["casing"] = self.grid.pv_grid.point_data["implicit_distance"]

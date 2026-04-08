@@ -47,6 +47,7 @@ ls_config = level_set_model.config.SimulationConfig(
     br_initial=1.0e-3,  # Initial burn rate
 )
 
+
 coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
