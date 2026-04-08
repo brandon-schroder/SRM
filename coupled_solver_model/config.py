@@ -8,4 +8,9 @@ from level_set_model import SimulationConfig as LSConfig
 class CoupledConfig:
     ib_config: IBConfig
     ls_config: LSConfig
+
+    coupling_scheme: str = 'explicit'
+    max_iter: int = 5
+    rel_tol: float = 1e-3
+
     t_end: float = 1.0

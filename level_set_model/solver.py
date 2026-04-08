@@ -110,7 +110,7 @@ class LSSolver:
         self.state.br[:] = np.interp(z_ls, x, br)
         return self.state.br
 
-    def step(self) -> Tuple[float, float]:
+    def step(self, save: bool = True) -> Tuple[float, float]:
         dt = adaptive_timestep(
             self.grid.dx, self.grid.polar_coords[0], self.grid.ng,
             self.cfg.CFL, self.cfg.t_end, self.state.br, self.state.t)
@@ -121,12 +121,13 @@ class LSSolver:
 
         self.state.t += dt
         self.step_count += 1
+        
+        if save:
+            if self.hdf5_recorder and (self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end):
+                self.hdf5_recorder.save()
 
-        if self.hdf5_recorder and (self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end):
-            self.hdf5_recorder.save()
-
-        if self.vtk_recorder and (self.step_count % self.cfg.vtk_interval == 0 or self.state.t >= self.cfg.t_end):
-            self.vtk_recorder.save()
+            if self.vtk_recorder and (self.step_count % self.cfg.vtk_interval == 0 or self.state.t >= self.cfg.t_end):
+                self.vtk_recorder.save()
 
         return dt, self.state.t
 

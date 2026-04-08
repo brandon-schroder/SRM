@@ -88,7 +88,7 @@ class IBSolver:
 
         return rhs_out
 
-    def step(self) -> Tuple[float, float]:
+    def step(self, save: bool = True) -> Tuple[float, float]:
         self.dt = adaptive_timestep(
             self.cfg.CFL, self.state.u, self.state.c,
             self.grid.dx[2], self.grid.ng, self.state.t, self.cfg.t_end)
@@ -98,8 +98,9 @@ class IBSolver:
 
         self.integrator.step(self.state.U[:, self.grid.interior], self.dt, self._compute_rhs)
 
-        if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
-            self.recorder.save()
+        if save:
+            if self.step_count % self.cfg.log_interval == 0 or self.state.t >= self.cfg.t_end:
+                self.recorder.save()
 
         self.state.t += self.dt
         self.step_count += 1

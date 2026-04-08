@@ -17,7 +17,6 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
     ng=3,  # Ghost cells
     bounds=(bounds[4], bounds[5]),  # Domain length (meters)
     CFL=0.95,  # Stability factor
-    t_end=20.0,  # Simulation duration
 
     # Initial Conditions
     p_inf=100.0e3,  # 1 atm Ambient Pressure
@@ -32,12 +31,10 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
     R = 325.62,
     gamma = (1083.0**2)/(325.62*(2713+273.15)),
 
-    log_interval = 100_000,
+    log_interval = 500,
 
     burn_model = "mp",
-    burn_rate_update_interval = 10,
-
-
+    burn_rate_update_interval = 1,
 )
 
 ls_config = level_set_model.config.SimulationConfig(
@@ -51,16 +48,17 @@ ls_config = level_set_model.config.SimulationConfig(
 
     ng=3,  # Ghost cells
     CFL=0.95,  # Stability factor
-    t_end=20.0,  # Simulation duration
     br_initial=10.0e-3,  # Initial burn rate
-    log_interval=10,
-    vtk_interval= 100
+    log_interval=1,
+    vtk_interval=0
 )
 
 coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
-    t_end=1.0)
+    t_end=1.0,
+    coupling_type='explicit'
+)
 
 solver = coupled_solver_model.solver.CoupledSolver(coupled_conf)
 
