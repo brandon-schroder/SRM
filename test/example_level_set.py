@@ -38,8 +38,8 @@ def main():
         br_initial=br_initial,
         output_filename="level_set_results.h5",
         vtk_dir="vtk_output",
-        vtk_interval=100,
-        log_interval=10,
+        vtk_interval=0,
+        log_interval=1,
     )
 
     config.dtype = np.float32
@@ -50,6 +50,7 @@ def main():
     # 2. Solver Setup
     # ---------------------------------------------------------
     solver = LSSolver(config)
+    solver.initialize()
     print(f"Grid Memory: {solver.state.phi.nbytes / 1e6:.2f} MB")
 
     # ---------------------------------------------------------
@@ -57,24 +58,22 @@ def main():
     # ---------------------------------------------------------
     print(f"Starting Time Integration (Target: {config.t_end}s)...")
     t_start = time.time()
-    with solver.recorder:
-        try:
-            while solver.state.t < config.t_end:
-                # Step returns dt and new time
-                dt, current_time = solver.step()
+    try:
+        while solver.state.t < config.t_end:
 
-                # Update burn rate (if coupled, this would come from internal ballistics)
-                solver.state.br = solver.set_burn_rate(x_ib, br_ib)
+            dt, current_time = solver.step()
 
-                if solver.step_count % 1 == 0:
-                    print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | ")
-        except KeyboardInterrupt:
-            print("\nSimulation interrupted by user. Saving data...")
-        except Exception as e:
-            print(f"\n[ERROR] Simulation crashed: {e}")
-            raise
-        finally:
-            solver.finalize()
+            solver.state.br = solver.set_burn_rate(x_ib, br_ib)
+
+            if solver.step_count % 1 == 0:
+                print(f"Step {solver.step_count}: t={current_time:.5f}s | dt={dt:.2e} | ")
+    except KeyboardInterrupt:
+        print("\nSimulation interrupted by user. Saving data...")
+    except Exception as e:
+        print(f"\n[ERROR] Simulation crashed: {e}")
+        raise
+    finally:
+        solver.finalize()
 
     t_end = time.time()
     print(f"Simulation took {t_end - t_start:.2f} seconds.")
