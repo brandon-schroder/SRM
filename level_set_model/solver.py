@@ -13,6 +13,7 @@ class LSSolver:
 
         self.grid = Grid3D(config)
         self.state = State(dims=self.grid.dims, dtype=self.cfg.dtype)
+        self.state.br = self.state.br + self.cfg.br_initial
 
         self.bc_flag = BCType[self.cfg.bc_type.upper()].value
         self.step_count = 0
@@ -42,9 +43,6 @@ class LSSolver:
         self.grid.pv_grid.point_data.remove("implicit_distance")
 
         self._get_geometry()
-
-        self.state.br = self.state.br + self.cfg.br_initial
-        self.state.t = 0.0
 
     def _compute_rhs(self, phi_interior: np.ndarray) -> np.ndarray:
 
