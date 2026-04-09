@@ -51,7 +51,7 @@ ls_config = level_set_model.config.SimulationConfig(
 coupled_conf = coupled_solver_model.config.CoupledConfig(
     ib_config=ib_config,
     ls_config=ls_config,
-    t_end=1.0,
+    t_end=0.2,
     coupling_scheme='explicit'
 )
 
@@ -71,21 +71,14 @@ while solver.t < coupled_conf.t_end:
 
     p_head = solver.ib.state.p.max()
 
-    # Create small DF for this step
-    df_step = pd.DataFrame({
-        "t": solver.ls.state.t,
-        "x": solver.ls.state.x,
-        "A": solver.ls.state.A_flow,
-        "P": solver.ls.state.P_propellant
-    })
-    history.append(df_step)
-
     print(f"Time: {t_current:.4f} s | dt_ls: {dt_ls:.2e} | P_head: {p_head / 1e6:.2f} MPa | Sub-cycles: {solver.sub_steps} |")
 
     if t_current >= coupled_conf.t_end or p_head < ib_config.p_inf:
         break
 
 end_time = time.time()
+
+solver.recorder.finalize()
 print(f"Simulation time: {end_time - start_time:.2f} s")
 
 

@@ -1,5 +1,3 @@
-import numpy as np
-
 from .config import CoupledConfig
 
 from internal_ballistics_model import IBSolver
@@ -19,6 +17,8 @@ class CoupledSolver:
         self.max_iter = config.max_iter
         self.tolerance = config.rel_tol
 
+        self.recorder = CoupledRecorder(self.cfg)
+
         self.initialize()
 
 
@@ -26,6 +26,8 @@ class CoupledSolver:
         self.ls.initialize()
         self._sync_geometry()
         self.ib.initialize()
+
+        self.recorder.record_step(self)
 
 
     def _sync_geometry(self):
@@ -44,8 +46,13 @@ class CoupledSolver:
     def step(self):
         """Dispatches to the preferred coupling scheme."""
         if self.cfg.coupling_scheme.lower() == 'implicit':
-            return self.implicit_step()
-        return self.explicit_step()
+            dt, t = self.implicit_step()
+        else:
+            dt, t = self.explicit_step()
+
+        self.recorder.record_step(self)
+
+        return dt, t
 
     def explicit_step(self):
         self.ls.state.br = self.ls.set_burn_rate(self.ib.grid.cart_coords[2], self.ib.state.br)
