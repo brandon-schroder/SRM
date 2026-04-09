@@ -5,6 +5,8 @@ from .config import CoupledConfig
 from internal_ballistics_model import IBSolver
 from level_set_model import LSSolver
 
+from coupled_solver_model.output import *
+
 class CoupledSolver:
     def __init__(self, config: CoupledConfig):
         self.cfg = config
@@ -27,8 +29,11 @@ class CoupledSolver:
 
 
     def _sync_geometry(self):
+
+        self.ls.state.A_flow = np.maximum(self.ls.state.A_flow, 1e-12)
+
         self.ib.set_geometry(
-            self.ls.state.x,
+            self.ls.state.z,
             self.ls.state.A_flow,
             self.ls.state.P_propellant,
             self.ls.state.P_wetted,
@@ -53,8 +58,8 @@ class CoupledSolver:
         self.sub_steps = 0
         while self.ib.state.t < t_target:
             dt_ib, t_ib = self.ib.step()
-            self.sub_steps+=1
 
+            self.sub_steps+=1
             if dt_ib <= 1E-10:
                 raise RuntimeError(f"IB Solver stalled at t={t_ib} (dt < 1e-10).")
 
