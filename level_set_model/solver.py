@@ -39,6 +39,8 @@ class LSSolver:
         self.state.phi = np.array(self.grid.pv_grid["propellant"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
         self.state.casing = np.array(self.grid.pv_grid["casing"].reshape(self.grid.dims, order='F'), dtype=self.cfg.dtype)
 
+        self.grid.pv_grid.point_data.remove("implicit_distance")
+
         self._get_geometry()
 
         self.state.br = self.state.br + self.cfg.br_initial
