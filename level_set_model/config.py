@@ -7,7 +7,7 @@ from pathlib import Path
 class SimulationConfig:
     n_periodics: int
     size: tuple[int, int, int]
-    bounds: list[float]
+    bounds: tuple[float, float, float|None, float|None, float, float]
     file_prop: str | Path
     file_case: str | Path
     file_scale: float = 1.0

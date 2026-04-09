@@ -1,20 +1,18 @@
 from pathlib import Path
-import pyvista as pv
-import pandas as pd
 import time
 
 import coupled_solver_model
 import internal_ballistics_model
 import level_set_model
 
-bounds=[14.0*1e-3, 67.0*1e-3, None, None, 4.83*1e-3, 1899*1e-3] # 1035.5
+master_bounds=(14.0*1e-3, 67.0*1e-3, None, None, 4.83*1e-3, 1899*1e-3) # 1035.5
 prop_file = Path("test\\geometry\\NAWC6-SRM-Propellant.STL")
 case_file = Path("test\\geometry\\NAWC6-SRM-Casing.STL")
 
 ib_config = internal_ballistics_model.config.SimulationConfig(
     # Grid parameters
     n_cells=500,  # Spatial resolution
-    bounds=(bounds[4], bounds[5]),  # Domain length (meters)
+    bounds=(master_bounds[4], master_bounds[5]),  # Domain length (meters)
     CFL=0.95,  # Stability factor
 
     # Initial Conditions
@@ -37,7 +35,7 @@ ib_config = internal_ballistics_model.config.SimulationConfig(
 ls_config = level_set_model.config.SimulationConfig(
     n_periodics=6,  # Number of symmetric segments
     size=(50, 40, 500),  # Resolution: (nr, ntheta, nz)
-    bounds=bounds,  # Physical dimensions
+    bounds=master_bounds,  # Physical dimensions
     file_scale=1.0e-3,
 
     file_prop=prop_file,  # Propellant SDF input

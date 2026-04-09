@@ -1,12 +1,11 @@
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Tuple
 
 
 @dataclass
 class SimulationConfig:
     n_cells: int
-    bounds: Tuple[float, float]
+    bounds: tuple[float, float]
     ng: int = 3
     CFL: float = 0.6
     t_end: float = 1.0
