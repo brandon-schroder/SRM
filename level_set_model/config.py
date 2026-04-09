@@ -38,7 +38,7 @@ class State:
     A_propellant: np.ndarray = field(init=False)
     P_propellant: np.ndarray = field(init=False)
     P_wetted: np.ndarray = field(init=False)
-    x: np.ndarray = field(init=False)
+    z: np.ndarray = field(init=False)
     br: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -51,4 +51,4 @@ class State:
         self.A_propellant = np.zeros(self.dims[2], dtype=self.dtype)
         self.P_propellant = np.zeros(self.dims[2], dtype=self.dtype)
         self.P_wetted = np.zeros(self.dims[2], dtype=self.dtype)
-        self.x = np.zeros(self.dims[2], dtype=self.dtype)
+        self.z = np.zeros(self.dims[2], dtype=self.dtype)
