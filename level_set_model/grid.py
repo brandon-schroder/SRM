@@ -8,7 +8,7 @@ class Grid3D:
         self.ng = config.ng
         self.size = config.size
         self.n_periodics = config.n_periodics
-        self.bounds = config.bounds
+        self.bounds = list(config.bounds)
         self.bounds[2] = 0
         self.bounds[3] = self.bounds[2] + 2.0 * np.pi / self.n_periodics
 
