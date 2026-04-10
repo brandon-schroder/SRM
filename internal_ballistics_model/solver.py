@@ -62,7 +62,7 @@ class IBSolver:
     def _compute_rhs(self, U_interior: np.ndarray) -> np.ndarray:
         rhs_out = rhs_numerics(
             U_interior, self.state.U, self.state.A, self.cfg.gamma, self.cfg.R,
-            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.grid.ng,
+            self.cfg.p0_inlet, self.cfg.t0_inlet, self.cfg.p_inf, self.cfg.t_inf, self.grid.ng,
             self.inlet_bc_flag, self.outlet_bc_flag, self.cfg.rho_p, self.cfg.Tf,
             self.state.br, self.state.P, self.grid.dx[2],
             self.state.rho, self.state.u, self.state.p, self.state.c,

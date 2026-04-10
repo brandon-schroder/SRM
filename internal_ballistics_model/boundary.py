@@ -4,7 +4,7 @@ from enum import IntEnum
 
 
 @njit(fastmath=True, cache=True)
-def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
+def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     i_int = ng
 
     rho_int = U[0, i_int] / A[i_int]
@@ -42,7 +42,7 @@ def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
 
 
 @njit(fastmath=True, cache=True)
-def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
+def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     N = U.shape[1]
     i_int = N - ng - 1
 
@@ -56,14 +56,19 @@ def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
     if mach_int >= 1.0:
         rho_b, u_b, p_b = rho_int, u_int, p_int
     else:
-        J_plus = u_int + 2.0 * c_int / (gamma - 1.0)
-
-        s_int = p_int / (rho_int ** gamma)
-
         p_b = p_inf
-        rho_b = (p_b / s_int) ** (1.0 / gamma)
-        c_b = np.sqrt(gamma * p_b / rho_b)
-        u_b = J_plus - 2.0 * c_b / (gamma - 1.0)
+
+        if u_int >= 0.0:
+            J_plus = u_int + 2.0 * c_int / (gamma - 1.0)
+            s_int = p_int / (rho_int ** gamma)
+            rho_b = (p_b / s_int) ** (1.0 / gamma)
+            c_b = np.sqrt(gamma * p_b / rho_b)
+            u_b = J_plus - 2.0 * c_b / (gamma - 1.0)
+        else:
+            rho_b = p_inf / (R * t_inf)
+            c_b = np.sqrt(gamma * p_b / rho_b)
+            J_minus = u_int - 2.0 * c_int / (gamma - 1.0)
+            u_b = J_minus + 2.0 * c_b / (gamma - 1.0)
 
     e_b = p_b / (gamma - 1.0) + 0.5 * rho_b * u_b ** 2
     for i in range(N - ng, N):
@@ -75,7 +80,7 @@ def boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
 
 
 @njit(fastmath=True, cache=True)
-def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
+def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     i0 = ng
 
     for i in range(ng):
@@ -89,7 +94,7 @@ def boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 
 
 @njit
-def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
+def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     for i in range(ng):
         ghost_idx = -ng + i
         interior_idx = -ng - 1 - i
@@ -102,7 +107,7 @@ def boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_back, ng):
 
 
 @njit(fastmath=True, cache=True)
-def boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
+def boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     for i in range(ng):
         U[0, i] = U[0, ng] * A[i] / A[ng]
         U[1, i] = U[1, ng] * A[i] / A[ng]
@@ -111,7 +116,7 @@ def boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
 
 
 @njit(fastmath=True, cache=True)
-def boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_back, ng):
+def boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_inf, t_inf, ng):
     for i in range(ng):
         ghost_idx = -1 - i
         interior_idx = -ng - 1
@@ -128,23 +133,23 @@ class BCType(IntEnum):
     TRANSMISSIVE = 2
 
 @njit(fastmath=True, cache=True)
-def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, ng, inlet_type, outlet_type):
+def apply_boundary_jit(U, A, gamma, R, p0, t0, p_inf, t_inf, ng, inlet_type, outlet_type):
 
     # Route Inlet Boundary Condition
     if inlet_type == BCType.REFLECTIVE.value:
-        U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_inlet_reflective(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
     elif inlet_type == BCType.CHARACTERISTIC.value:
-        U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
     elif inlet_type == BCType.TRANSMISSIVE.value:
-        U = boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_inlet_transmissive(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
 
     # Route Outlet Boundary Condition
     if outlet_type == BCType.REFLECTIVE.value:
-        U = boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_outlet_reflective(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
     elif outlet_type == BCType.CHARACTERISTIC.value:
-        U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_outlet_characteristic(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
     elif outlet_type == BCType.TRANSMISSIVE.value:
-        U = boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_inf, ng)
+        U = boundary_outlet_transmissive(U, A, gamma, R, p0, t0, p_inf, t_inf, ng)
 
     return U
 

@@ -114,7 +114,7 @@ def adaptive_timestep(CFL, u, c, dz, ng, t, t_end):
 
 
 @njit(fastmath=True, cache=True)
-def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng,
+def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, t_inf, ng,
                  inlet_bc, outlet_bc, rho_p, Tf, br, P_propellant, dz,
                  rho_out, u_out, p_out, c_out, A_interfaces, F_hat, S, rhs_out):
     nc = U_interior.shape[1]
@@ -126,7 +126,7 @@ def rhs_numerics(U_interior, U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng,
     for i in range(nc + 1):
         A_interfaces[i] = 0.5 * (A[ng - 1 + i] + A[ng + i])
 
-    U_full = apply_boundary_jit(U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, ng, inlet_bc, outlet_bc)
+    U_full = apply_boundary_jit(U_full, A, gamma, R, p0_inlet, t0_inlet, p_inf, t_inf, ng, inlet_bc, outlet_bc)
 
     rho_out, u_out, p_out, c_out = conserved_to_primitives(U_full, A, gamma, rho_out, u_out, p_out, c_out)
 

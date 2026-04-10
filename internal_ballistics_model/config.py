@@ -14,6 +14,7 @@ class SimulationConfig:
     u_initial: float = 1.0
     t_initial: float = 288.15
     p_inf: float = 100.0E3
+    t_inf: float = 288.15
     t0_inlet: float = 288.15
     p0_inlet: float = 100.0e3
     br_initial: float = 1E-6
