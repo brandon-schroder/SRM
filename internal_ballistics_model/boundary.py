@@ -19,7 +19,7 @@ def boundary_inlet_characteristic(U, A, gamma, R, p0, t0, p_inf, ng):
 
     a_quad = (gamma + 1.0) / 4.0
     b_quad = -J_minus * (gamma - 1.0) / 2.0
-    c_quad = ((gamma - 1.0) / 4.0) * (J_minus ** 2) - c0 ** 2
+    c_quad = ((gamma - 1.0) / 4.0) * (J_minus ** 2) - (c0 ** 2) / (gamma - 1.0)
 
     discriminant = b_quad ** 2 - 4.0 * a_quad * c_quad
 
