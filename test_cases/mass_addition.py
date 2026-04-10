@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
-import os
+from pathlib import Path
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
 
 from internal_ballistics_model import SimulationConfig, IBSolver
 from internal_ballistics_model.numerics import primitives_to_conserved
@@ -37,7 +38,7 @@ def main():
         Tf=2888.0,  # Flame temperature
         inlet_bc_type="reflective",   # Solid wall
         outlet_bc_type="reflective",  # Solid wall
-        erosive_model="override",
+        burn_model="override",
 
     )
 
@@ -61,7 +62,7 @@ def main():
     solver.state.br[:] = config.br_initial
 
     solver.state.U[:] = primitives_to_conserved(
-        solver.state.rho, solver.state.u, solver.state.p, solver.state.A, config.gamma
+        solver.state.rho, solver.state.u, solver.state.p, solver.state.A, config.gamma, solver.state.U
     )
 
     print("Running Closed-Volume Mass Addition Test...")

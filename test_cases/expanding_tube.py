@@ -5,8 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-# Adjust path to find the level_set_model package
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# --- Path Management ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
 
 from level_set_model import SimulationConfig, LSSolver
 
@@ -26,7 +27,7 @@ def main():
     R_case = 0.034  # Casing radius: 34 mm
 
     # Grid Bounds [r_min, r_max, th_min, th_max, z_min, z_max]
-    bounds = [0.01, 0.035, None, None, 0.0, 0.1]
+    bounds = (0.01, 0.035, None, None, 0.0, 0.1)
 
     config = SimulationConfig(
         n_periodics=11,  # Defines a sector (360/11 degrees)
@@ -39,9 +40,6 @@ def main():
         CFL=0.5,
         t_end=1.0,  # Run for 1 second (10mm of burning)
         br_initial=br_initial,
-        output_filename="ls_test.h5",
-        vtk_dir="vtk_test",
-        log_interval_vtk=10  # Save VTK often to visualize
     )
 
     config.dtype = np.float64  # Use float64 for strict verification
