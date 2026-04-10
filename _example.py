@@ -6,8 +6,8 @@ import internal_ballistics_model
 import level_set_model
 
 master_bounds=(14.0*1e-3, 67.0*1e-3, None, None, 4.83*1e-3, 1899*1e-3) # 1035.5
-prop_file = Path("test\\geometry\\NAWC6-SRM-Propellant.STL")
-case_file = Path("test\\geometry\\NAWC6-SRM-Casing.STL")
+prop_file = Path("_test_cases\\coupled_solver_model\\geometry\\NAWC6-SRM-Propellant.STL")
+case_file = Path("_test_cases\\coupled_solver_model\\geometry\\NAWC6-SRM-Casing.STL")
 
 ib_config = internal_ballistics_model.config.SimulationConfig(
     # Grid parameters
