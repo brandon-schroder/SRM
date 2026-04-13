@@ -1,0 +1,28 @@
+# NAWC6_INPUTS.yaml
+global:
+  t_end: 0.2
+  coupling_scheme: explicit
+  cfl: 0.95
+  # master_bounds: (r_min, r_max, theta_min, theta_max, z_min, z_max)
+  master_bounds: [0.014, 0.067, 0.0, 0.0, 0.00483, 1.899]
+
+internal_ballistics:
+  n_cells: 500
+  p_inf: 100000.0
+  rho_p: 1800.0
+  a_coef: 2.3401517528124825e-05  # 0.00678/(6.9E6**0.360)
+  n_exp: 0.36
+  br_initial: 10.0e-3
+  Tf: 2986.15       # 2713 + 273.15
+  R: 325.62
+  gamma: 1.2062413567794354    # (1083.0**2)/(325.62*2986.15)
+  burn_model: mp
+  burn_rate_update_interval: 1
+
+level_set:
+  n_periodics: 6
+  size: [50, 40, 500]
+  file_scale: 0.001
+  br_initial: 0.001
+  file_prop: "geometry/NAWC6-SRM-Propellant.STL"
+  file_case: "geometry/NAWC6-SRM-Casing.STL"
